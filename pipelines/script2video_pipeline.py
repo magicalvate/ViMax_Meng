@@ -12,6 +12,7 @@ import yaml
 from interfaces import *
 from langchain.chat_models import init_chat_model
 from tools.render_backend import RenderBackend
+from tools.protocols import VideoRAIFilteredError
 
 class Script2VideoPipeline:
 
@@ -323,10 +324,17 @@ class Script2VideoPipeline:
                 frame_paths.append(os.path.join(self.working_dir, "shots", f"{shot_description.idx}", "last_frame.png"))
 
             print(f"🎬 Starting video generation for shot {shot_description.idx}...")
-            video_output = await self.video_generator.generate_single_video(
-                prompt=shot_description.motion_desc + "\n" + shot_description.audio_desc,
-                reference_image_paths=frame_paths,
-            )
+            try:
+                video_output = await self.video_generator.generate_single_video(
+                    prompt=shot_description.motion_desc + "\n" + shot_description.audio_desc,
+                    reference_image_paths=frame_paths,
+                )
+            except VideoRAIFilteredError:
+                logging.warning(f"Shot {shot_description.idx}: audio prompt filtered by RAI, retrying with motion-only prompt...")
+                video_output = await self.video_generator.generate_single_video(
+                    prompt=shot_description.motion_desc,
+                    reference_image_paths=frame_paths,
+                )
             video_output.save(video_path)
             print(f"☑️ Generated video for shot {shot_description.idx}, saved to {video_path}.")
 

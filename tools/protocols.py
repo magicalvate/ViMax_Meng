@@ -7,6 +7,11 @@ Yunwu/Doubao, Yunwu/Veo) are already compliant by duck typing.
 
 from typing import List, Protocol, runtime_checkable
 
+
+class VideoRAIFilteredError(RuntimeError):
+    """Raised when a video generation request is rejected by RAI safety filters."""
+    pass
+
 from interfaces.image_output import ImageOutput
 from interfaces.video_output import VideoOutput
 

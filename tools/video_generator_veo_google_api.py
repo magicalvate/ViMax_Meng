@@ -6,6 +6,7 @@ from google.genai import types
 from google.genai.errors import ClientError
 from interfaces.video_output import VideoOutput
 from utils.rate_limiter import RateLimiter
+from tools.protocols import VideoRAIFilteredError
 
 # https://ai.google.dev/gemini-api/docs/video-generation?hl=zh-cn
 
@@ -63,8 +64,8 @@ class VideoGeneratorVeoGoogleAPI:
             await self.rate_limiter.acquire()
 
         # Retry logic for rate limit errors
-        max_retries = 3
-        retry_delay = 5
+        max_retries = 6
+        retry_delay = 30
 
         for attempt in range(max_retries):
             try:
@@ -81,9 +82,19 @@ class VideoGeneratorVeoGoogleAPI:
                 else:
                     raise
 
+        poll_failures = 0
         while not operation.done:
             await asyncio.sleep(2)
-            operation = self.client.operations.get(operation)
+            try:
+                operation = self.client.operations.get(operation)
+                poll_failures = 0
+            except Exception as e:
+                poll_failures += 1
+                if poll_failures >= 5:
+                    raise
+                logging.warning(f"Polling error (attempt {poll_failures}/5): {e}, retrying...")
+                await asyncio.sleep(5 * poll_failures)
+                continue
             logging.info(f"Video generation not completed, waiting 2 seconds...")
 
         # Check if operation completed successfully
@@ -98,6 +109,12 @@ class VideoGeneratorVeoGoogleAPI:
             raise RuntimeError(error_msg)
 
         if not hasattr(operation.response, 'generated_videos') or not operation.response.generated_videos:
+            rai_reasons = getattr(operation.response, 'rai_media_filtered_reasons', None)
+            rai_count = getattr(operation.response, 'rai_media_filtered_count', None)
+            if rai_count:
+                error_msg = f"Video generation filtered by RAI safety ({rai_count} filtered): {rai_reasons}"
+                logging.error(error_msg)
+                raise VideoRAIFilteredError(error_msg)
             error_msg = "Video generation completed but no videos were generated"
             logging.error(error_msg)
             raise RuntimeError(error_msg)

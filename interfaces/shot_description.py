@@ -18,9 +18,13 @@ class ShotBriefDescription(BaseModel):
         examples=[0, 1, 2],
     )
     visual_desc: str = Field(
-        description='''A vivid and detailed visual description of the shot that convey rich visual information through text. The character identifiers in the description must match those in the character list and be enclosed in angle brackets (e.g., <Alice>, <Bob>). All visible characters should be described.
-        If there is a conversation, please write down the content of the conversation), when you meet some dialogue, you should write into the visual content description with :" " symbols and the character's features (eg. <SLING> (male, late 20s, Texan accent softened by military precision, confident and energetic.) says: "Gear retracted. Flaps transitioning. Flight path stable. You are clear to climb."). 
-        ''',
+        description=(
+            "A vivid and detailed visual description of the shot that conveys rich visual information through text. "
+            "The character identifiers in the description must match those in the character list and be enclosed in angle brackets (e.g., <Alice>, <Bob>). All visible characters should be described. "
+            "For on-screen dialogue (character's lips visible), include it in the visual description with the character's features "
+            "(e.g., <SLING> (male, late 20s, confident) says: \"Gear retracted. Flaps transitioning.\"). "
+            "NARRATOR (V.O.) and any voice-over narration must NOT be included in visual_desc — they are audio-only and belong in audio_desc."
+        ),
         examples=[
             "An over-the-shoulder shot at eye level, positioned behind <Alice>. The foreground, including <Alice>'s shoulder and head, is softly blurred, directing focus onto <Bob>'s face. <Bob>'s subtle reactions—shifting from surprise to delight—are clearly visible. The supermarket background is gently blurred with cool fluorescent lighting.",
         ]
@@ -29,55 +33,21 @@ class ShotBriefDescription(BaseModel):
 
     # audio
     audio_desc: str = Field(
-        description="A detailed description of the audio in the shot.",
+        description=(
+            "A detailed description of the audio in the shot. "
+            "Use [Sound Effect] for ambient/environmental sounds. "
+            "Use [Speaker] for on-screen character dialogue (the character's lips are visible). "
+            "Use [Narrator (V.O.)] for off-screen voice-over narration — the narrator does NOT appear visually. "
+            "NARRATOR (V.O.) lines from the script must ALWAYS be represented as [Narrator (V.O.)] here, never as [Speaker]."
+        ),
         examples=[
             "[Sound Effect] Ambient sound (supermarket background noise, shopping cart wheels rolling)",
             "[Speaker] Alice (Happy): Hello, how are you?",
+            "[Narrator (V.O.)] 山西省晋中市左权县，麻田八路军总部旧址静默伫立太行山间，承载着一段烽火荣光。",
+            "[Sound Effect] Wind howling. [Narrator (V.O.)] That night, everything changed.",
             None,
         ],
     )
-
-    # sound_effect: Optional[str] = Field(
-    #     default=None,
-    #     description="The sound effects used in the shot.",
-    #     examples=[
-    #         "Ambient sound (supermarket background noise, shopping cart wheels rolling)",
-    #         None,
-    #     ],
-    # )
-    # speaker: Optional[str] = Field(
-    #     default=None,
-    #     description="The speaker in the shot, if applicable. If there is no speaker, this field should be set to None.",
-    #     examples=[
-    #         "Alice",
-    #         None,
-    #     ],
-    # )
-    # is_speaker_lip_visible: Optional[bool] = Field(
-    #     default=None,
-    #     description="Indicates whether the speaker's lips are visible in the shot. If there is no speaker, this field should be set to None.",
-    #     examples=[
-    #         True,
-    #         False,
-    #         None,
-    #     ],
-    # )
-    # line: Optional[str] = Field(
-    #     default=None,
-    #     description="The dialogue or monologue in the shot, if applicable. If there is a speaker, there must be a line. If there is no speaker, this field should be set to None.",
-    #     examples=[
-    #         "Hello, how are you?",
-    #         None,
-    #     ],
-    # )
-    # emotion: Optional[str] = Field(
-    #     default=None,
-    #     description="The emotion of the speaker when delivering the line, if applicable. If there is a speaker, there must be an emotion. If there is no speaker, this field should be set to None.",
-    #     examples=[
-    #         "Happy",
-    #         None,
-    #     ],
-    # )
 
     def __str__(self):
         s = f"Shot {self.idx}:\n"
@@ -160,30 +130,18 @@ class ShotDescription(BaseModel):
 
     # audio
     audio_desc: str = Field(
-        description="A detailed description of the audio in the shot.",
+        description=(
+            "A detailed description of the audio in the shot. "
+            "Use [Sound Effect] for ambient/environmental sounds. "
+            "Use [Speaker] for on-screen character dialogue (the character's lips are visible). "
+            "Use [Narrator (V.O.)] for off-screen voice-over narration — the narrator does NOT appear visually. "
+            "NARRATOR (V.O.) lines from the script must ALWAYS be represented as [Narrator (V.O.)] here, never as [Speaker]."
+        ),
         examples=[
             "[Sound Effect] Ambient sound (supermarket background noise, shopping cart wheels rolling)",
             "[Speaker] Alice (Happy): Hello, how are you?",
+            "[Narrator (V.O.)] 山西省晋中市左权县，麻田八路军总部旧址静默伫立太行山间，承载着一段烽火荣光。",
+            "[Sound Effect] Wind howling. [Narrator (V.O.)] That night, everything changed.",
             None,
         ],
     )
-    # sound_effect: Optional[str] = Field(
-    #     default=None,
-    #     description="The sound effects used in the shot. For example, a door creaking or footsteps approaching.",
-    # )
-    # speaker: Optional[str] = Field(
-    #     default=None,
-    #     description="The speaker in the shot, if applicable. If there is no speaker, this field should be set to None.",
-    # )
-    # is_speaker_lip_visible: Optional[bool] = Field(
-    #     default=None,
-    #     description="Indicates whether the speaker's lips are visible in the shot. If there is no speaker, this field should be set to None.",
-    # )
-    # line: Optional[str] = Field(
-    #     default=None,
-    #     description="The dialogue or monologue in the shot, if applicable. If there is a speaker, there must be a line. If there is no speaker, this field should be set to None.",
-    # )
-    # emotion: Optional[str] = Field(
-    #     default=None,
-    #     description="The emotion of the speaker when delivering the line, if applicable. If there is a speaker, there must be an emotion. If there is no speaker, this field should be set to None.",
-    # )

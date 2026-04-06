@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ViMax Preview</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+<div id="app">
+
+  <!-- 顶部栏 -->
+  <div class="topbar">
+    <h1>ViMax Preview</h1>
+    <select class="project-select" v-model="currentProject">
+      <option v-for="p in projects" :key="p" :value="p">{{ p }}</option>
+    </select>
+    <span class="badge" v-if="characters.length">{{ characters.length }} 角色</span>
+    <span class="badge" v-if="shots.length">{{ shots.length }} 镜头</span>
+  </div>
+
+  <!-- Tab 导航 -->
+  <div class="tabs">
+    <button class="tab-btn" :class="{active: activeTab==='shots'}"      @click="activeTab='shots'">镜头</button>
+    <button class="tab-btn" :class="{active: activeTab==='characters'}" @click="activeTab='characters'">人物</button>
+    <button class="tab-btn" :class="{active: activeTab==='script'}"     @click="activeTab='script'">脚本</button>
+    <button class="tab-btn" :class="{active: activeTab==='final'}"      @click="activeTab='final'">最终视频</button>
+  </div>
+
+  <!-- 主内容 -->
+  <div class="content">
+    <div v-if="loading" class="loading">加载中...</div>
+    <div v-else-if="!currentProject" class="empty">请选择项目</div>
+
+    <!-- ══ 镜头 Tab ══ -->
+    <div v-else-if="activeTab==='shots'">
+      <div v-if="shots.length === 0" class="empty">暂无镜头数据</div>
+      <div class="shot-list">
+        <div class="shot-card" v-for="shot in shots" :key="shot.idx">
+
+          <!-- 折叠头 -->
+          <div class="shot-header" @click="toggleShot(shot.idx)">
+            <span class="shot-num">Shot {{ shot.idx }}</span>
+            <span v-if="shot.description" class="variation-badge" :class="shot.description.variation_type">
+              {{ shot.description.variation_type }}
+            </span>
+            <span class="shot-summary">{{ shot.description && shot.description.visual_desc }}</span>
+            <span class="chevron" :class="{open: isShotExpanded(shot.idx)}">▾</span>
+          </div>
+
+          <!-- 展开内容 -->
+          <div v-if="isShotExpanded(shot.idx)" class="shot-body">
+
+            <!-- 描述编辑面板 -->
+            <div class="desc-panel" v-if="shot.description">
+              <div class="desc-panel-header" @click="toggleDescEdit(shot.idx)">
+                <span class="section-label" style="margin:0">描述文字</span>
+                <span class="desc-edit-toggle">{{ isEditingDesc(shot.idx) ? '收起' : '编辑' }}</span>
+              </div>
+              <div v-if="isEditingDesc(shot.idx)" class="desc-fields">
+                <label class="desc-label">首帧描述 (ff_desc)</label>
+                <textarea class="desc-textarea" v-model="shot.description.ff_desc" rows="3"></textarea>
+                <label class="desc-label">末帧描述 (lf_desc)</label>
+                <textarea class="desc-textarea" v-model="shot.description.lf_desc" rows="3"></textarea>
+                <label class="desc-label">镜头运动 (motion_desc)</label>
+                <textarea class="desc-textarea" v-model="shot.description.motion_desc" rows="2"></textarea>
+                <label class="desc-label">音频描述 (audio_desc)</label>
+                <textarea class="desc-textarea" v-model="shot.description.audio_desc" rows="2"></textarea>
+                <div class="desc-actions">
+                  <button class="btn btn-primary" @click="saveDesc(shot)">保存描述</button>
+                  <button class="btn btn-ghost" @click="toggleDescEdit(shot.idx)">取消</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 四格 grid -->
+            <div class="shot-grid">
+
+              <!-- ① 首帧 -->
+              <div class="frame-cell">
+                <div class="cell-header">
+                  <p class="section-label">首帧</p>
+                  <div class="cell-actions">
+                    <span class="task-badge running" v-if="isRunning(`frame_${shot.idx}_first`)">生成中…</span>
+                    <span class="task-badge done"    v-else-if="taskState(`frame_${shot.idx}_first`)?.status==='done'">✓</span>
+                    <button class="action-btn regen" :disabled="isRunning(`frame_${shot.idx}_first`)"
+                      @click="regenerateFrame(shot,'first')" title="AI 重新生成">↺ 重新生成</button>
+                  </div>
+                </div>
+                <div class="frame-img-wrap" v-if="shot.has_first_frame">
+                  <img class="frame-img" :src="shotFileUrl(shot.idx,'first_frame.png')" alt="first frame"
+                    @click="openLightbox(shotFileUrl(shot.idx,'first_frame.png'))" />
+                  <button class="frame-replace-btn" @click.stop="openFrameModal(shot,'first')">替换</button>
+                </div>
+                <div class="frame-empty" v-else @click="openFrameModal(shot,'first')">
+                  <span class="empty-icon">＋</span>
+                  <span class="empty-text">点击上传首帧</span>
+                </div>
+              </div>
+
+              <!-- ② 参考人物 -->
+              <div class="chars-cell">
+                <p class="section-label">参考人物</p>
+                <div class="chars-scroll">
+                  <template v-if="visibleCharPortraits(shot).length > 0">
+                    <div class="char-portrait-wrap" v-for="cp in visibleCharPortraits(shot)" :key="cp.charName">
+                      <div class="portrait-task-overlay" v-if="isRunning(`portrait_${cp.charIdx}_front`)">
+                        <span class="spinner"></span>
+                      </div>
+                      <img class="char-portrait-img" :src="portraitUrl(cp.charName,'front')" :alt="cp.charName"
+                        @click="openLightbox(portraitUrl(cp.charName,'front'))"
+                        @error="$event.target.style.opacity='0.15'" />
+                      <div class="char-portrait-name">{{ cp.charName }}</div>
+                      <div class="char-portrait-btns">
+                        <button class="char-action-btn" @click.stop="openPortraitModal(cp.charName,cp.charIdx,'front')">替换</button>
+                        <button class="char-action-btn regen" :disabled="isRunning(`portrait_${cp.charIdx}_front`)"
+                          @click.stop="regeneratePortrait(cp.charName,cp.charIdx,'front')">↺</button>
+                      </div>
+                    </div>
+                  </template>
+                  <span class="chars-empty" v-else>本镜头无可见角色</span>
+                </div>
+              </div>
+
+              <!-- ③ 末帧 -->
+              <div class="frame-cell">
+                <div class="cell-header">
+                  <p class="section-label">末帧</p>
+                  <div class="cell-actions">
+                    <span class="task-badge running" v-if="isRunning(`frame_${shot.idx}_last`)">生成中…</span>
+                    <span class="task-badge done"    v-else-if="taskState(`frame_${shot.idx}_last`)?.status==='done'">✓</span>
+                    <button class="action-btn regen" :disabled="isRunning(`frame_${shot.idx}_last`)"
+                      @click="regenerateFrame(shot,'last')" title="AI 重新生成">↺ 重新生成</button>
+                  </div>
+                </div>
+                <div class="frame-img-wrap" v-if="shot.has_last_frame">
+                  <img class="frame-img" :src="shotFileUrl(shot.idx,'last_frame.png')" alt="last frame"
+                    @click="openLightbox(shotFileUrl(shot.idx,'last_frame.png'))" />
+                  <button class="frame-replace-btn" @click.stop="openFrameModal(shot,'last')">替换</button>
+                </div>
+                <div class="frame-empty" v-else @click="openFrameModal(shot,'last')">
+                  <span class="empty-icon">＋</span>
+                  <span class="empty-text">点击上传末帧</span>
+                </div>
+              </div>
+
+              <!-- ④ 参考场景 -->
+              <div class="scene-cell">
+                <p class="section-label">参考场景</p>
+                <div class="scene-scroll">
+                  <div class="scene-ref-wrap" v-for="ref in shot.scene_refs" :key="ref.filename">
+                    <img class="scene-ref-img" :class="{readonly: ref.readonly}"
+                      :src="fileUrl(ref.path)" :alt="ref.filename"
+                      @click="openLightbox(fileUrl(ref.path))"
+                      @error="$event.target.style.opacity='0.15'" />
+                    <span class="scene-readonly-badge" v-if="ref.readonly">自动生成</span>
+                    <button class="scene-delete-btn" v-if="!ref.readonly"
+                      @click.stop="deleteSceneRef(shot.idx, ref.filename)" title="删除">✕</button>
+                  </div>
+                  <label :for="`scene-input-${shot.idx}`" class="scene-add-btn" title="添加场景参考图">＋</label>
+                  <input :id="`scene-input-${shot.idx}`" class="scene-add-input" type="file" accept="image/*"
+                    @change="addSceneRef(shot.idx, $event)" />
+                </div>
+              </div>
+
+            </div><!-- end shot-grid -->
+
+            <!-- 视频区域 -->
+            <div class="video-section">
+              <div class="cell-header">
+                <h4>镜头视频</h4>
+                <div class="cell-actions">
+                  <span class="task-badge running" v-if="isRunning(`video_${shot.idx}`)">生成中…</span>
+                  <span class="task-badge done"    v-else-if="taskState(`video_${shot.idx}`)?.status==='done'">✓</span>
+                  <button class="action-btn regen" :disabled="isRunning(`video_${shot.idx}`)"
+                    @click="regenerateVideo(shot)" title="AI 重新生成视频（无首帧则文生视频）">↺ 重新生成视频</button>
+                </div>
+              </div>
+              <video v-if="shot.has_video" class="shot-video" controls
+                :src="shotFileUrl(shot.idx,'video.mp4')" :key="imgTs[`shot_${shot.idx}_video.mp4`]"></video>
+              <div class="frame-empty" v-else style="aspect-ratio:16/9;max-width:100%">
+                <span class="empty-icon">▶</span>
+                <span class="empty-text">视频尚未生成</span>
+              </div>
+            </div>
+
+          </div><!-- end shot-body -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ 人物 Tab ══ -->
+    <div v-else-if="activeTab==='characters'">
+      <div v-if="characters.length === 0" class="empty">暂无角色数据</div>
+      <div class="char-grid">
+        <div class="char-card" v-for="char in characters" :key="char.idx">
+          <p class="char-name">{{ char.identifier_in_scene }}</p>
+          <p class="char-feature">{{ char.static_features }}</p>
+          <p class="char-feature">{{ char.dynamic_features }}</p>
+          <div class="portrait-row">
+            <div class="portrait-item" v-for="view in ['front','side','back']" :key="view">
+              <span class="portrait-label">{{ view }}</span>
+              <div class="portrait-img-wrap">
+                <div class="portrait-task-overlay" v-if="isRunning(`portrait_${char.idx}_${view}`)">
+                  <span class="spinner"></span>
+                </div>
+                <img class="portrait-img" :src="portraitUrl(char.identifier_in_scene, view)" :alt="view"
+                  @click="openLightbox(portraitUrl(char.identifier_in_scene, view))"
+                  @error="$event.target.style.opacity='0.15'" />
+                <div class="portrait-overlay-btns">
+                  <button @click.stop="openPortraitModal(char.identifier_in_scene, char.idx, view)">替换</button>
+                  <button @click.stop="regeneratePortrait(char.identifier_in_scene, char.idx, view)"
+                    :disabled="isRunning(`portrait_${char.idx}_${view}`)">↺ 重生成</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ 脚本 Tab ══ -->
+    <div v-else-if="activeTab==='script'">
+      <!-- 文件管理栏 -->
+      <div class="script-toolbar">
+        <div class="script-file-list">
+          <button
+            v-for="sf in scriptFiles" :key="sf"
+            class="script-file-btn"
+            :class="{active: currentScriptFile===sf}"
+            @click="loadScript(sf)"
+          >{{ sf.split('/').pop() }}</button>
+        </div>
+        <div class="script-add">
+          <input class="script-path-input" v-model="newScriptPath" placeholder="粘贴脚本文件绝对路径…" @keyup.enter="addScript" />
+          <button class="btn btn-primary" @click="addScript">添加</button>
+        </div>
+      </div>
+
+      <!-- 加载中 -->
+      <div v-if="scriptLoading" class="loading">解析中...</div>
+
+      <!-- 文本脚本 -->
+      <div v-else-if="scriptData && scriptData.type==='text'" class="script-text-wrap">
+        <h3 class="script-title">{{ scriptData.filename }}</h3>
+        <pre class="script-text">{{ scriptData.content }}</pre>
+      </div>
+
+      <!-- Docx 表格脚本 -->
+      <div v-else-if="scriptData && scriptData.type==='docx'" class="script-docx-wrap">
+        <h3 class="script-title">{{ scriptData.title || scriptData.filename }}</h3>
+        <div class="script-table-wrap" v-for="(tbl, ti) in scriptData.tables" :key="ti">
+          <table class="script-table">
+            <thead>
+              <tr v-if="tbl[0] && tbl[0].is_header">
+                <th v-for="(cell, ci) in tbl[0].cells" :key="ci">{{ cell }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, ri) in tbl.slice(1)" :key="ri" :class="{'section-row': isSectionRow(row)}">
+                <td v-for="(cell, ci) in row.cells" :key="ci">{{ cell }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div v-else-if="!scriptLoading" class="empty">
+        请添加脚本文件路径
+      </div>
+    </div>
+
+    <!-- ══ 最终视频 Tab ══ -->
+    <div v-else-if="activeTab==='final'">
+      <div v-if="!hasFinalVideo" class="empty">最终视频尚未生成</div>
+      <div class="final-video-wrap" v-else>
+        <h3>最终视频</h3>
+        <video class="final-video" controls :src="finalVideoUrl()"></video>
+        <br />
+        <a class="download-btn" :href="finalVideoUrl()" download="final_video.mp4">下载视频</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ Lightbox ══ -->
+  <div class="modal-overlay" v-if="lightboxUrl" @click.self="lightboxUrl=null">
+    <img class="lightbox-img" :src="lightboxUrl" alt="preview" @click.stop />
+    <button class="lightbox-close" @click="lightboxUrl=null">✕</button>
+  </div>
+
+  <!-- ══ 替换 Modal ══ -->
+  <div class="modal-overlay" v-if="modal" @click.self="closeModal">
+    <div class="modal">
+      <h3>{{ modal.title }}</h3>
+      <img v-if="modal.previewUrl" class="modal-preview" :class="{portrait: modal.isPortrait}"
+        :src="modal.previewUrl" alt="preview" />
+      <div class="upload-zone" @click="triggerUploadInput">
+        <input id="upload-input" type="file" accept="image/*" @change="onFileSelected" />
+        <p>
+          <strong>点击选择</strong> 图片替换<br/>
+          <span v-if="modal.pendingFile" style="color:#a78bfa">已选择: {{ modal.pendingFile.name }}</span>
+          <span v-else>支持 PNG / JPG / WEBP</span>
+        </p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" @click="closeModal">取消</button>
+        <button class="btn btn-primary" :disabled="!modal.pendingFile || modal.uploading" @click="modal.upload()">
+          {{ modal.uploading ? '上传中...' : '确认替换' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ Toast ══ -->
+  <div class="toast" :class="toast.type" v-if="toast">{{ toast.msg }}</div>
+
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

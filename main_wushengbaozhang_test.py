@@ -43,7 +43,7 @@ style = "1940s Chinese historical documentary, cinematic, dark and moody lightin
 
 async def main():
     pipeline = Script2VideoPipeline.init_from_config(
-        config_path="configs/wushengbaozhang_google.yaml")
+        config_path="configs/wushengbaozhang_test.yaml")
     await pipeline(script=script, user_requirement=user_requirement, style=style)
 
 

@@ -145,3 +145,4 @@ class BestImageSelector:
         logging.info(f"Best image selected: {best_image_path}")
         logging.info(f"Selection reason: {response.reason}")
         return best_image_path
+

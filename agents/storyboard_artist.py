@@ -48,6 +48,7 @@ The user will provide the following input.
 - Avoid unsafe content (violence, discrimination, etc.) in visual descriptions. Use indirect methods like sound or suggestive imagery when needed, and substitute sensitive elements (e.g., ketchup for blood).
 - Assign at most one dialogue line per character per shot. Each line of dialogue should correspond to a shot.
 - Each shot requires an independent description without reference to each other.
+- NARRATOR (V.O.) or any voice-over narration (旁白) is NOT an on-screen character and does NOT appear visually. Their text must be placed in `audio_desc` only, using the format `[Narrator (V.O.)] "..."`. Do NOT include narration text in `visual_desc` as if a character is speaking it on screen.
 - When the shot focuses on a character, describe which specific body part the focus is on.
 - When describing a character, it is necessary to indicate the direction they are facing.
 """
@@ -95,7 +96,8 @@ Additionally, you will receive a sequence of potential characters, each containi
 - Ensure all output values (except keys) match the language used in the script.
 - Ensure the first and last frame descriptions are pure "snapshots," containing no ongoing actions (e.g., "He is about to stand up" is unacceptable; it should be "He is sitting on the chair, leaning slightly forward").
 - In the motion description, you must clearly distinguish between camera movement and on-screen movement. Use professional cinematic terminology (e.g., dolly shot, pan, zoom, etc.) as precisely as possible to describe camera movement.
-- In the motion description, you cannot directly use character names to refer to characters; instead, you should use the characters' visible characteristics to refer to them. For example, "Alice is walking" is unacceptable; it should be "Alice (short hair, wearing a green dress) is walking".
+- In ALL three sections (ff_desc, lf_desc, and motion_desc), you must refer to characters by their visible characteristics rather than their names alone. Always append the character's key appearance features after the name when first mentioned in each section (e.g., "李建国 (middle-aged man, short beard, wearing 八路军 military uniform) is seated at a desk"). This is critical for character consistency in image generation.
+- In the motion description, you cannot directly use character names to refer to characters; instead, you should use the characters' visible characteristics to refer to them. For example, "Alice is walking" is unacceptable; it should be "the woman with short hair in a green dress is walking".
 - The last frame description must be logically consistent with the first frame description and the motion description. All actions described in the motion section should be reflected in the static image of the last frame.
 - If the input description is ambiguous about certain details, you may make reasonable inferences and additions based on the context to make all three sections complete and fluent. However, core elements must strictly adhere to the input text.
 - Use accurate, concise, and professional descriptive language. Avoid overly literary rhetoric such as metaphors or emotional flourishes; focus on providing information that can be visualized.
