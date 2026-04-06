@@ -6,6 +6,70 @@ export default {
   template: `
 <div class="pipeline-panel">
 
+  <!-- API 配置面板 -->
+  <div class="api-config-panel" style="margin-bottom:20px;border:1px solid #2d3148;border-radius:8px;padding:16px;background:#1a1d27">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+      <h3 style="margin:0;font-size:14px;flex:1">⚙️ API 配置</h3>
+      <button class="btn btn-primary" style="padding:4px 12px;font-size:12px" @click="loadAvailableApis(); loadApiConfig()">刷新</button>
+      <button class="btn btn-ghost" style="padding:4px 12px;font-size:12px" @click="toggleApiPanel">{{ showApiPanel ? '收起' : '展开' }}</button>
+    </div>
+
+    <div v-if="showApiPanel" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+      <!-- 图片生成器选择 -->
+      <div style="border:1px solid #252840;border-radius:6px;padding:12px;background:#252840">
+        <label style="display:block;font-size:12px;color:#64748b;margin-bottom:8px;font-weight:600">图片生成器</label>
+        <select v-model="apiConfigModel.image_generator.class_path" style="width:100%;padding:6px;background:#1a1d27;border:1px solid #3d4266;border-radius:4px;color:#e2e8f0;font-size:12px">
+          <option value="">默认</option>
+          <option v-for="api in availableApis.image_generator" :key="api.class_path + api.model" :value="api.class_path">
+            {{ api.name }}
+          </option>
+        </select>
+        <div style="margin-top:8px;max-height:100px;overflow:auto;font-size:11px;color:#94a3b8">
+          <div v-if="apiConfigModel.image_generator.class_path">
+            选中: {{ availableApis.image_generator.find(a => a.class_path === apiConfigModel.image_generator.class_path)?.name }}
+          </div>
+        </div>
+      </div>
+
+      <!-- 视频生成器选择 -->
+      <div style="border:1px solid #252840;border-radius:6px;padding:12px;background:#252840">
+        <label style="display:block;font-size:12px;color:#64748b;margin-bottom:8px;font-weight:600">视频生成器</label>
+        <select v-model="apiConfigModel.video_generator.class_path" style="width:100%;padding:6px;background:#1a1d27;border:1px solid #3d4266;border-radius:4px;color:#e2e8f0;font-size:12px">
+          <option value="">默认</option>
+          <option v-for="api in availableApis.video_generator" :key="api.class_path + api.t2v_model" :value="api.class_path">
+            {{ api.name }}
+          </option>
+        </select>
+        <div style="margin-top:8px;max-height:100px;overflow:auto;font-size:11px;color:#94a3b8">
+          <div v-if="apiConfigModel.video_generator.class_path">
+            选中: {{ availableApis.video_generator.find(a => a.class_path === apiConfigModel.video_generator.class_path)?.name }}
+          </div>
+        </div>
+      </div>
+
+      <!-- 聊天模型选择 -->
+      <div style="border:1px solid #252840;border-radius:6px;padding:12px;background:#252840">
+        <label style="display:block;font-size:12px;color:#64748b;margin-bottom:8px;font-weight:600">聊天模型</label>
+        <select v-model="apiConfigModel.chat_model.model" style="width:100%;padding:6px;background:#1a1d27;border:1px solid #3d4266;border-radius:4px;color:#e2e8f0;font-size:12px">
+          <option value="">默认</option>
+          <option v-for="api in availableApis.chat_model" :key="api.model + api.base_url" :value="api.model">
+            {{ api.name }}
+          </option>
+        </select>
+        <div style="margin-top:8px;max-height:100px;overflow:auto;font-size:11px;color:#94a3b8">
+          <div v-if="apiConfigModel.chat_model.model">
+            选中: {{ availableApis.chat_model.find(a => a.model === apiConfigModel.chat_model.model)?.name }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showApiPanel" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" @click="loadApiConfig">取消</button>
+      <button class="btn btn-primary" @click="saveApiConfig">保存配置</button>
+    </div>
+  </div>
+
   <!-- ① 提取角色 -->
   <div class="pipeline-stage-card" :class="{done: stagesStatus.extract_characters?.done, running: isStageRunning('extract_characters')}">
     <div class="pipeline-stage-header" @click="toggleStageExpanded('extract_characters')">
@@ -31,8 +95,10 @@ export default {
             :class="{active: currentScriptFile===sf}" @click="loadScript(sf)">{{ sf.split('/').pop() }}</button>
         </div>
         <div class="script-add" style="margin-bottom:10px">
-          <input class="script-path-input" v-model="newScriptPath" placeholder="粘贴脚本文件绝对路径…" @keyup.enter="addScript" />
-          <button class="btn btn-primary" @click="addScript">添加</button>
+          <label class="btn btn-primary" style="cursor:pointer">
+            选择脚本文件
+            <input type="file" accept=".txt,.md,.docx" @change="uploadScript($event)" style="display:none" />
+          </label>
         </div>
         <div v-if="scriptLoading" class="loading" style="padding:8px 0">解析中...</div>
         <div v-else-if="scriptData && scriptData.type==='text'" class="script-text-wrap" style="max-height:300px;overflow:auto">

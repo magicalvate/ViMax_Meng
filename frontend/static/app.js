@@ -4,8 +4,9 @@ import { setupShots } from './modules/shots.js';
 import { setupCharacters } from './modules/characters.js';
 import { setupScripts } from './modules/scripts.js';
 import { setupPipeline } from './modules/pipeline.js';
+import PipelineTab from './modules/components/pipeline-tab.js';
 
-const { createApp, ref, reactive, watch } = Vue;
+const { createApp, ref, reactive, watch, provide } = Vue;
 
 createApp({
   setup() {
@@ -124,7 +125,11 @@ createApp({
 
     watch(currentProject, val => { if (val) loadProject(val); });
     watch(activeTab, val => {
-      if (val === 'pipeline' && scriptFiles.value.length === 0) scriptsModule.loadScriptFiles();
+      if (val === 'pipeline') {
+        if (scriptFiles.value.length === 0) scriptsModule.loadScriptFiles();
+        pipelineModule.loadAvailableApis();
+        pipelineModule.loadApiConfig();
+      }
     });
 
     // ── 辅助查询 ─────────────────────────────────────────────────────────────
@@ -146,7 +151,7 @@ createApp({
 
     init();
 
-    return {
+    const appState = {
       // 状态
       projects, currentProject, activeTab, loading,
       characters, portraitsRegistry, portraitVersions, shots, cameraTree, hasFinalVideo, metadata,
@@ -169,5 +174,8 @@ createApp({
       // pipeline
       ...pipelineModule,
     };
-  }
+    provide('app', appState);
+    return appState;
+  },
+  components: { PipelineTab },
 }).mount("#app");

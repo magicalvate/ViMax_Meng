@@ -129,10 +129,74 @@ export function setupPipeline({ currentProject, shots, cameraTree, metadata, enc
     }
   }
 
+  // ── API 配置 ──────────────────────────────────────────────────────────────
+  const showApiPanel = ref(false);
+  const availableApis = ref({
+    image_generator: [],
+    video_generator: [],
+    chat_model: [],
+  });
+  const apiConfig = reactive({
+    image_generator: {},
+    video_generator: {},
+    chat_model: {},
+  });
+  const apiConfigModel = reactive({
+    image_generator: {},
+    video_generator: {},
+    chat_model: {},
+  });
+
+  function toggleApiPanel() {
+    showApiPanel.value = !showApiPanel.value;
+  }
+
+  async function loadAvailableApis() {
+    try {
+      const res = await fetch("/api/api-options");
+      if (res.ok) {
+        Object.assign(availableApis.value, await res.json());
+      }
+    } catch {}
+  }
+
+  async function loadApiConfig() {
+    if (!currentProject.value) return;
+    try {
+      const res = await fetch(`/api/projects/${enc(currentProject.value)}/api-config`);
+      if (res.ok) {
+        const config = await res.json();
+        Object.assign(apiConfig, config);
+        Object.assign(apiConfigModel, JSON.parse(JSON.stringify(config)));
+      }
+    } catch {}
+  }
+
+  async function saveApiConfig() {
+    if (!currentProject.value) return;
+    try {
+      const res = await fetch(`/api/projects/${enc(currentProject.value)}/api-config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(apiConfigModel),
+      });
+      if (res.ok) {
+        showToast("API 配置已保存（管道将重新加载）", "success");
+        Object.assign(apiConfig, apiConfigModel);
+      } else {
+        showToast("保存失败", "error");
+      }
+    } catch (e) {
+      showToast("保存失败: " + e.message, "error");
+    }
+  }
+
   return {
     pipelineStages, stagesStatus, stageTasks, stageExpanded, userRequirement, storyboard,
     toggleStageExpanded, stageStyle, cameraGroups, shotHasFrame,
     fetchStagesStatus, isStageRunning, stageTaskMsg, stageTaskError,
     runStage, saveUserRequirement, saveMetadataField,
+    availableApis, apiConfig, apiConfigModel, showApiPanel,
+    loadAvailableApis, loadApiConfig, saveApiConfig, toggleApiPanel,
   };
 }

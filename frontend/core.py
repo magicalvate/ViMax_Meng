@@ -70,6 +70,88 @@ def _apply_api_overrides(config: dict, overrides: dict):
             config.setdefault("video_generator", {})["init_args"] = merged
 
 
+def get_available_apis() -> Dict[str, List[Dict]]:
+    """扫描所有配置文件，返回可用的 API 选项。
+
+    Returns:
+        {
+            "image_generator": [
+                {"name": "...", "class_path": "...", "model": "..."},
+                ...
+            ],
+            "video_generator": [...],
+            "chat_model": [...]
+        }
+    """
+    apis = {
+        "image_generator": [],
+        "video_generator": [],
+        "chat_model": [],
+    }
+
+    seen_configs = set()
+    for yaml_file in CONFIGS_DIR.glob("*.yaml"):
+        try:
+            config = yaml.safe_load(yaml_file.read_text(encoding="utf-8"))
+            config_name = yaml_file.stem
+
+            # 提取图片生成器
+            if "image_generator" in config:
+                img_cfg = config["image_generator"]
+                class_path = img_cfg.get("class_path", "")
+                init_args = img_cfg.get("init_args", {})
+                model = init_args.get("model", "")
+
+                key = (class_path, model)
+                if key not in seen_configs:
+                    apis["image_generator"].append({
+                        "name": f"{class_path.split('.')[-1]} - {model or config_name}",
+                        "class_path": class_path,
+                        "model": model,
+                        "config_file": config_name,
+                    })
+                    seen_configs.add(key)
+
+            # 提取视频生成器
+            if "video_generator" in config:
+                vid_cfg = config["video_generator"]
+                class_path = vid_cfg.get("class_path", "")
+                init_args = vid_cfg.get("init_args", {})
+                t2v_model = init_args.get("t2v_model", "")
+
+                key = (class_path, t2v_model)
+                if key not in seen_configs:
+                    apis["video_generator"].append({
+                        "name": f"{class_path.split('.')[-1]} - {t2v_model or config_name}",
+                        "class_path": class_path,
+                        "t2v_model": t2v_model,
+                        "config_file": config_name,
+                    })
+                    seen_configs.add(key)
+
+            # 提取聊天模型
+            if "chat_model" in config:
+                chat_cfg = config["chat_model"]
+                init_args = chat_cfg.get("init_args", {})
+                model = init_args.get("model", "")
+                base_url = init_args.get("base_url", "")
+
+                key = (model, base_url)
+                if key not in seen_configs:
+                    apis["chat_model"].append({
+                        "name": f"{model or config_name}",
+                        "model": model,
+                        "base_url": base_url,
+                        "config_file": config_name,
+                    })
+                    seen_configs.add(key)
+        except Exception as e:
+            # 忽略解析错误
+            pass
+
+    return apis
+
+
 def get_pipeline(project: str):
     wd = WORKING_DIR / project
     meta_path = wd / "metadata.json"

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 
 from frontend.core import wd
 
@@ -30,6 +30,25 @@ async def add_script(project: str, request: Request):
         files.append(path)
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"ok": True, "script_files": files}
+
+
+@router.post("/api/projects/{project}/scripts/upload")
+async def upload_script(project: str, file: UploadFile = File(...)):
+    p = wd(project)
+    scripts_dir = p / "scripts"
+    scripts_dir.mkdir(exist_ok=True)
+    dest = scripts_dir / file.filename
+    content = await file.read()
+    dest.write_bytes(content)
+    # add to metadata
+    script_path = str(dest)
+    meta_path = p / "metadata.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+    files = meta.setdefault("script_files", [])
+    if script_path not in files:
+        files.append(script_path)
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"ok": True, "script_files": files, "path": script_path}
 
 
 @router.delete("/api/projects/{project}/scripts")

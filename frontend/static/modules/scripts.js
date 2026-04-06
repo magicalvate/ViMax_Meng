@@ -42,10 +42,31 @@ export function setupScripts({ currentProject, scriptFiles, currentScriptFile, s
     }
   }
 
+  async function uploadScript(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    event.target.value = "";
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`/api/projects/${enc(currentProject.value)}/scripts/upload`, {
+        method: "POST",
+        body: form,
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      scriptFiles.value = data.script_files;
+      loadScript(data.path);
+      showToast("脚本已上传", "success");
+    } catch (e) {
+      showToast("上传失败: " + e.message, "error");
+    }
+  }
+
   function isSectionRow(row) {
     const cells = row.cells;
     return cells[0] && cells.slice(1).every(c => !c);
   }
 
-  return { loadScriptFiles, loadScript, addScript, isSectionRow };
+  return { loadScriptFiles, loadScript, addScript, uploadScript, isSectionRow };
 }

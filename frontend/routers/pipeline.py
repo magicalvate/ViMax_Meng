@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from frontend.core import (
     wd, get_pipeline, load_style, preset_all_frame_events,
     new_task, task_done, task_error, task_progress, WORKING_DIR,
+    get_available_apis,
 )
 
 logger = logging.getLogger("vimax.server")
@@ -373,3 +374,49 @@ async def _stage_concatenate(tid: str, p: Path):
     final_path = p / "final_video.mp4"
     final.write_videofile(str(final_path), codec="libx264", preset="medium")
     task_progress(tid, f"最终视频已保存：{final_path.name}")
+
+
+# ── API 配置管理 ──────────────────────────────────────────────────────────────
+
+@router.get("/api/api-options")
+async def get_api_options():
+    """获取所有可用的 API 选项（全局）"""
+    return get_available_apis()
+
+
+@router.get("/api/projects/{project}/api-config")
+async def get_api_config(project: str):
+    """获取项目的当前 API 配置"""
+    p = wd(project)
+    meta_path = p / "metadata.json"
+    meta = {}
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return meta.get("api_overrides", {})
+
+
+@router.post("/api/projects/{project}/api-config")
+async def set_api_config(project: str, request: Request):
+    """保存项目的 API 配置"""
+    p = wd(project)
+    meta_path = p / "metadata.json"
+    meta = {}
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    body = await request.json()
+    meta["api_overrides"] = body
+
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # 清空缓存以强制重新加载管道
+    from frontend.core import _pipeline_cache
+    _pipeline_cache.pop(project, None)
+
+    return {"ok": True, "api_overrides": meta["api_overrides"]}
