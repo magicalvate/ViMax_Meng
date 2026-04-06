@@ -47,18 +47,76 @@ def find_config(project: str) -> Optional[str]:
 
 # ── Pipeline 缓存 ────────────────────────────────────────────────────────────
 
-_pipeline_cache: Dict[str, Any] = {}  # project_name -> pipeline instance
+_pipeline_cache: Dict[str, tuple] = {}  # project_name -> (fingerprint, pipeline instance)
+
+
+def _apply_api_overrides(config: dict, overrides: dict):
+    """Apply api_overrides from metadata onto a base config dict (in-place)."""
+    if "chat_model" in overrides:
+        for k, v in overrides["chat_model"].items():
+            if v is not None and v != "":
+                config.setdefault("chat_model", {}).setdefault("init_args", {})[k] = v
+    if "image_generator" in overrides:
+        ov = overrides["image_generator"]
+        if ov.get("class_path"):
+            config["image_generator"]["class_path"] = ov["class_path"]
+        if ov.get("init_args"):
+            merged = dict(config.get("image_generator", {}).get("init_args", {}))
+            for k, v in ov["init_args"].items():
+                if v is not None and v != "":
+                    merged[k] = v
+            config.setdefault("image_generator", {})["init_args"] = merged
+    if "video_generator" in overrides:
+        ov = overrides["video_generator"]
+        if ov.get("class_path"):
+            config["video_generator"]["class_path"] = ov["class_path"]
+        if ov.get("init_args"):
+            merged = dict(config.get("video_generator", {}).get("init_args", {}))
+            for k, v in ov["init_args"].items():
+                if v is not None and v != "":
+                    merged[k] = v
+            config.setdefault("video_generator", {})["init_args"] = merged
 
 
 def get_pipeline(project: str):
-    if project not in _pipeline_cache:
-        config_path = find_config(project)
-        if not config_path:
-            raise HTTPException(404, f"No config file found for project '{project}'")
-        from pipelines.script2video_pipeline import Script2VideoPipeline
-        _pipeline_cache[project] = Script2VideoPipeline.init_from_config(config_path)
-        logger.info(f"Pipeline loaded for project '{project}' using config '{config_path}'")
-    return _pipeline_cache[project]
+    wd = WORKING_DIR / project
+    meta_path = wd / "metadata.json"
+    overrides: dict = {}
+    if meta_path.exists():
+        try:
+            overrides = json.loads(meta_path.read_text(encoding="utf-8")).get("api_overrides", {})
+        except Exception:
+            pass
+    fingerprint = json.dumps(overrides, sort_keys=True)
+
+    cached = _pipeline_cache.get(project)
+    if cached and cached[0] == fingerprint:
+        return cached[1]
+
+    config_path = find_config(project)
+    if not config_path:
+        raise HTTPException(404, f"No config file found for project '{project}'")
+
+    with open(config_path, "r", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+
+    _apply_api_overrides(config, overrides)
+
+    from langchain.chat_models import init_chat_model
+    from tools.render_backend import RenderBackend
+    from pipelines.script2video_pipeline import Script2VideoPipeline
+
+    chat_model = init_chat_model(**config["chat_model"]["init_args"])
+    backend = RenderBackend.from_config(config)
+    pipeline = Script2VideoPipeline(
+        chat_model=chat_model,
+        image_generator=backend.image_generator,
+        video_generator=backend.video_generator,
+        working_dir=config["working_dir"],
+    )
+    _pipeline_cache[project] = (fingerprint, pipeline)
+    logger.info(f"Pipeline (re)loaded for project '{project}' using config '{config_path}'")
+    return pipeline
 
 
 # ── Task 系统 ────────────────────────────────────────────────────────────────
@@ -158,8 +216,17 @@ def _load_style(wd: Path) -> str:
 # ── Frame 启用/禁用状态 ────────────────────────────────────────────────────────
 
 def _abs_to_rel_path(wd: Path, abs_path: str) -> str:
+    p = Path(abs_path)
+    # Case 1: already an absolute path under wd
+    if p.is_absolute():
+        try:
+            return str(p.relative_to(wd)).replace("\\", "/")
+        except ValueError:
+            return abs_path
+    # Case 2: relative path stored as ".working_dir/{project}/..." (relative to BASE_DIR)
+    resolved = BASE_DIR / p
     try:
-        return str(Path(abs_path).relative_to(wd)).replace("\\", "/")
+        return str(resolved.relative_to(wd)).replace("\\", "/")
     except ValueError:
         return abs_path
 
@@ -1088,6 +1155,450 @@ async def delete_portrait_version(project: str, char_idx: int, view: str, vid: s
             for e in es
         ]
     return {"ok": True, "was_selected": was_selected, "versions": result}
+
+
+# ── 阶段状态 & 手动触发 ────────────────────────────────────────────────────────
+
+def _get_script(wd: Path) -> str:
+    """从 metadata.script_files 读取第一个脚本文本；找不到则返回空字符串。"""
+    meta_path = wd / "metadata.json"
+    if not meta_path.exists():
+        return ""
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    files = meta.get("script_files", [])
+    if not files:
+        return ""
+    p = Path(files[0])
+    if not p.exists():
+        return ""
+    suffix = p.suffix.lower()
+    if suffix in (".txt", ".md"):
+        return p.read_text(encoding="utf-8")
+    if suffix == ".docx":
+        try:
+            import docx as _docx
+            doc = _docx.Document(str(p))
+            return "\n".join(para.text for para in doc.paragraphs)
+        except Exception:
+            return ""
+    return ""
+
+
+def _stages_status(wd: Path) -> Dict:
+    chars_path = wd / "characters.json"
+    registry_path = wd / "character_portraits_registry.json"
+    storyboard_path = wd / "storyboard.json"
+    camera_tree_path = wd / "camera_tree.json"
+    final_video_path = wd / "final_video.mp4"
+
+    chars: List = []
+    if chars_path.exists():
+        try:
+            chars = json.loads(chars_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    portrait_count = 0
+    if registry_path.exists():
+        try:
+            reg = json.loads(registry_path.read_text(encoding="utf-8"))
+            portrait_count = sum(len(v) for v in reg.values())
+        except Exception:
+            pass
+
+    storyboard: List = []
+    if storyboard_path.exists():
+        try:
+            storyboard = json.loads(storyboard_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    storyboard_count = len(storyboard)
+
+    shots_dir = wd / "shots"
+    shot_desc_count = 0
+    shots_with_ff = 0
+    shots_with_video = 0
+    if shots_dir.exists():
+        for d in shots_dir.iterdir():
+            if d.is_dir():
+                if (d / "shot_description.json").exists():
+                    shot_desc_count += 1
+                if (d / "first_frame.png").exists():
+                    shots_with_ff += 1
+                if (d / "video.mp4").exists():
+                    shots_with_video += 1
+
+    return {
+        "extract_characters": {
+            "done": chars_path.exists(),
+            "count": len(chars),
+        },
+        "generate_portraits": {
+            "done": registry_path.exists() and portrait_count > 0,
+            "count": portrait_count,
+        },
+        "design_storyboard": {
+            "done": storyboard_path.exists() and storyboard_count > 0,
+            "count": storyboard_count,
+        },
+        "decompose_descriptions": {
+            "done": storyboard_count > 0 and shot_desc_count == storyboard_count,
+            "shots_done": shot_desc_count,
+            "shots_total": storyboard_count,
+        },
+        "construct_camera_tree": {
+            "done": camera_tree_path.exists(),
+        },
+        "generate_frames": {
+            "done": storyboard_count > 0 and shots_with_ff == storyboard_count,
+            "shots_done": shots_with_ff,
+            "shots_total": storyboard_count,
+        },
+        "generate_videos": {
+            "done": storyboard_count > 0 and shots_with_video == storyboard_count,
+            "shots_done": shots_with_video,
+            "shots_total": storyboard_count,
+        },
+        "concatenate": {
+            "done": final_video_path.exists(),
+        },
+    }
+
+
+def _clear_stage_cache(wd: Path, stage: str):
+    """删除指定阶段的缓存文件，以便强制重新运行该阶段。"""
+    shots_dir = wd / "shots"
+
+    if stage == "extract_characters":
+        (wd / "characters.json").unlink(missing_ok=True)
+
+    elif stage == "generate_portraits":
+        (wd / "character_portraits_registry.json").unlink(missing_ok=True)
+        portraits_dir = wd / "character_portraits"
+        if portraits_dir.exists():
+            shutil.rmtree(str(portraits_dir))
+
+    elif stage == "design_storyboard":
+        (wd / "storyboard.json").unlink(missing_ok=True)
+
+    elif stage == "decompose_descriptions":
+        if shots_dir.exists():
+            for d in shots_dir.iterdir():
+                if d.is_dir():
+                    (d / "shot_description.json").unlink(missing_ok=True)
+
+    elif stage == "construct_camera_tree":
+        (wd / "camera_tree.json").unlink(missing_ok=True)
+
+    elif stage == "generate_frames":
+        if shots_dir.exists():
+            for d in shots_dir.iterdir():
+                if d.is_dir():
+                    for fname in (
+                        "first_frame.png", "last_frame.png",
+                        "first_frame_selector_output.json", "last_frame_selector_output.json",
+                        "first_frame_ref_overrides.json", "last_frame_ref_overrides.json",
+                    ):
+                        (d / fname).unlink(missing_ok=True)
+                    for f in d.glob("transition_video_from_shot_*.mp4"):
+                        f.unlink(missing_ok=True)
+                    for f in d.glob("new_camera_*.png"):
+                        f.unlink(missing_ok=True)
+
+    elif stage == "generate_videos":
+        if shots_dir.exists():
+            for d in shots_dir.iterdir():
+                if d.is_dir():
+                    (d / "video.mp4").unlink(missing_ok=True)
+
+    elif stage == "concatenate":
+        (wd / "final_video.mp4").unlink(missing_ok=True)
+
+
+_STAGE_PREREQUISITES: Dict[str, List[str]] = {
+    "extract_characters":     [],
+    "generate_portraits":     ["characters.json"],
+    "design_storyboard":      ["characters.json"],
+    "decompose_descriptions":  ["storyboard.json"],
+    "construct_camera_tree":  [],   # 动态检查 shot_description 文件
+    "generate_frames":        ["camera_tree.json", "character_portraits_registry.json"],
+    "generate_videos":        [],   # 动态检查 first_frame 文件
+    "concatenate":            [],   # 动态检查 video 文件
+}
+
+
+@app.get("/api/projects/{project}/stages/status")
+async def get_stages_status(project: str):
+    wd = _wd(project)
+    return _stages_status(wd)
+
+
+@app.post("/api/projects/{project}/run/{stage}")
+async def run_stage(project: str, stage: str, request: Request):
+    valid_stages = set(_STAGE_PREREQUISITES.keys())
+    if stage not in valid_stages:
+        raise HTTPException(400, f"Unknown stage '{stage}'. Valid: {sorted(valid_stages)}")
+
+    wd = _wd(project)
+    body: Dict = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    force = bool(body.get("force", False))
+
+    # 静态前置检查
+    for prereq in _STAGE_PREREQUISITES[stage]:
+        if not (wd / prereq).exists():
+            raise HTTPException(400, f"前置条件未满足：{prereq} 不存在，请先运行依赖阶段")
+
+    # 动态前置检查
+    storyboard_loaded: Optional[List] = None
+
+    def _load_storyboard() -> List:
+        nonlocal storyboard_loaded
+        if storyboard_loaded is None:
+            p = wd / "storyboard.json"
+            if not p.exists():
+                raise HTTPException(400, "前置条件未满足：storyboard.json 不存在，请先运行 design_storyboard")
+            storyboard_loaded = json.loads(p.read_text(encoding="utf-8"))
+        return storyboard_loaded
+
+    if stage == "construct_camera_tree":
+        storyboard = _load_storyboard()
+        shots_dir = wd / "shots"
+        for shot in storyboard:
+            idx = shot["idx"]
+            if not (shots_dir / str(idx) / "shot_description.json").exists():
+                raise HTTPException(
+                    400,
+                    f"前置条件未满足：shot {idx} 的 shot_description.json 不存在，请先运行 decompose_descriptions",
+                )
+
+    elif stage == "generate_videos":
+        storyboard = _load_storyboard()
+        shots_dir = wd / "shots"
+        for shot in storyboard:
+            idx = shot["idx"]
+            if not (shots_dir / str(idx) / "first_frame.png").exists():
+                raise HTTPException(
+                    400,
+                    f"前置条件未满足：shot {idx} 的 first_frame.png 不存在，请先运行 generate_frames",
+                )
+
+    elif stage == "concatenate":
+        storyboard = _load_storyboard()
+        shots_dir = wd / "shots"
+        for shot in storyboard:
+            idx = shot["idx"]
+            if not (shots_dir / str(idx) / "video.mp4").exists():
+                raise HTTPException(
+                    400,
+                    f"前置条件未满足：shot {idx} 的 video.mp4 不存在，请先运行 generate_videos",
+                )
+
+    if force:
+        _clear_stage_cache(wd, stage)
+
+    pipeline = get_pipeline(project)
+    tid = _new_task()
+    asyncio.create_task(_run_stage_task(tid, pipeline, wd, stage))
+    return {"task_id": tid}
+
+
+async def _run_stage_task(tid: str, pipeline, wd: Path, stage: str):
+    try:
+        if stage == "extract_characters":
+            await _stage_extract_characters(tid, pipeline, wd)
+        elif stage == "generate_portraits":
+            await _stage_generate_portraits(tid, pipeline, wd)
+        elif stage == "design_storyboard":
+            await _stage_design_storyboard(tid, pipeline, wd)
+        elif stage == "decompose_descriptions":
+            await _stage_decompose_descriptions(tid, pipeline, wd)
+        elif stage == "construct_camera_tree":
+            await _stage_construct_camera_tree(tid, pipeline, wd)
+        elif stage == "generate_frames":
+            await _stage_generate_frames(tid, pipeline, wd)
+        elif stage == "generate_videos":
+            await _stage_generate_videos(tid, pipeline, wd)
+        elif stage == "concatenate":
+            await _stage_concatenate(tid, wd)
+        _task_done(tid)
+    except Exception as e:
+        logger.exception(f"Stage task {tid} ({stage}) failed")
+        _task_error(tid, str(e))
+
+
+async def _stage_extract_characters(tid: str, pipeline, wd: Path):
+    _task_progress(tid, "读取脚本…")
+    script = _get_script(wd)
+    if not script:
+        raise ValueError("找不到脚本文件，请先在项目中添加脚本（scripts）")
+    _task_progress(tid, "LLM 提取角色中…")
+    characters = await pipeline.extract_characters(script=script)
+    _task_progress(tid, f"完成，提取到 {len(characters)} 个角色")
+
+
+async def _stage_generate_portraits(tid: str, pipeline, wd: Path):
+    from interfaces import CharacterInScene
+    _task_progress(tid, "加载角色信息…")
+    characters = [
+        CharacterInScene.model_validate(c)
+        for c in json.loads((wd / "characters.json").read_text(encoding="utf-8"))
+    ]
+    style = _load_style(wd)
+    _task_progress(tid, f"生成 {len(characters)} 个角色的肖像（front/side/back）…")
+    await pipeline.generate_character_portraits(
+        characters=characters,
+        character_portraits_registry=None,
+        style=style,
+    )
+    _task_progress(tid, "角色肖像生成完成")
+
+
+async def _stage_design_storyboard(tid: str, pipeline, wd: Path):
+    from interfaces import CharacterInScene
+    _task_progress(tid, "读取脚本和角色…")
+    script = _get_script(wd)
+    if not script:
+        raise ValueError("找不到脚本文件，请先在项目中添加脚本（scripts）")
+    characters = [
+        CharacterInScene.model_validate(c)
+        for c in json.loads((wd / "characters.json").read_text(encoding="utf-8"))
+    ]
+    meta: Dict = {}
+    meta_path = wd / "metadata.json"
+    if meta_path.exists():
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    user_requirement = meta.get("user_requirement", "")
+    _task_progress(tid, "LLM 设计分镜中…")
+    storyboard = await pipeline.design_storyboard(
+        script=script,
+        characters=characters,
+        user_requirement=user_requirement,
+    )
+    _task_progress(tid, f"分镜设计完成，共 {len(storyboard)} 个镜头")
+
+
+async def _stage_decompose_descriptions(tid: str, pipeline, wd: Path):
+    from interfaces import CharacterInScene, ShotBriefDescription
+    _task_progress(tid, "加载分镜和角色…")
+    characters = [
+        CharacterInScene.model_validate(c)
+        for c in json.loads((wd / "characters.json").read_text(encoding="utf-8"))
+    ]
+    storyboard = [
+        ShotBriefDescription.model_validate(s)
+        for s in json.loads((wd / "storyboard.json").read_text(encoding="utf-8"))
+    ]
+    _task_progress(tid, f"并发拆解 {len(storyboard)} 个镜头的视觉描述…")
+    shot_descriptions = await pipeline.decompose_visual_descriptions(
+        shot_brief_descriptions=storyboard,
+        characters=characters,
+    )
+    _task_progress(tid, f"视觉描述拆解完成，共 {len(shot_descriptions)} 个镜头")
+
+
+async def _stage_construct_camera_tree(tid: str, pipeline, wd: Path):
+    from interfaces import ShotDescription
+    _task_progress(tid, "加载镜头描述…")
+    shots_dir = wd / "shots"
+    shot_descriptions = [
+        ShotDescription.model_validate(
+            json.loads((d / "shot_description.json").read_text(encoding="utf-8"))
+        )
+        for d in sorted(shots_dir.iterdir(), key=lambda x: int(x.name))
+        if d.is_dir() and (d / "shot_description.json").exists()
+    ]
+    _task_progress(tid, f"LLM 构建相机树（{len(shot_descriptions)} 个镜头）…")
+    camera_tree = await pipeline.construct_camera_tree(shot_descriptions=shot_descriptions)
+    _task_progress(tid, f"相机树构建完成，共 {len(camera_tree)} 个相机")
+
+
+async def _stage_generate_frames(tid: str, pipeline, wd: Path):
+    from interfaces import CharacterInScene, ShotDescription, Camera
+    from pipelines.script2video_pipeline import Script2VideoPipeline
+
+    _task_progress(tid, "加载上下文…")
+    characters = [
+        CharacterInScene.model_validate(c)
+        for c in json.loads((wd / "characters.json").read_text(encoding="utf-8"))
+    ]
+    registry = json.loads((wd / "character_portraits_registry.json").read_text(encoding="utf-8"))
+    camera_tree = [
+        Camera.model_validate(c)
+        for c in json.loads((wd / "camera_tree.json").read_text(encoding="utf-8"))
+    ]
+    shots_dir = wd / "shots"
+    shot_descriptions = [
+        ShotDescription.model_validate(
+            json.loads((d / "shot_description.json").read_text(encoding="utf-8"))
+        )
+        for d in sorted(shots_dir.iterdir(), key=lambda x: int(x.name))
+        if d.is_dir() and (d / "shot_description.json").exists()
+    ]
+
+    # 初始化 frame_events（全部 unset，让 pipeline 正常完成后 set）
+    Script2VideoPipeline.frame_events = {
+        sd.idx: {"first_frame": asyncio.Event(), "last_frame": asyncio.Event()}
+        for sd in shot_descriptions
+    }
+
+    priority_shot_idxs = [cam.parent_cam_idx for cam in camera_tree if cam.parent_cam_idx is not None]
+    _task_progress(tid, f"并发生成 {len(camera_tree)} 个相机的帧图…")
+    await asyncio.gather(*[
+        pipeline.generate_frames_for_single_camera(
+            camera=cam,
+            shot_descriptions=shot_descriptions,
+            characters=characters,
+            character_portraits_registry=registry,
+            priority_shot_idxs=priority_shot_idxs,
+        )
+        for cam in camera_tree
+    ])
+    _task_progress(tid, "帧图生成完成")
+
+
+async def _stage_generate_videos(tid: str, pipeline, wd: Path):
+    from interfaces import ShotDescription
+
+    _task_progress(tid, "加载镜头描述…")
+    shots_dir = wd / "shots"
+    shot_descriptions = [
+        ShotDescription.model_validate(
+            json.loads((d / "shot_description.json").read_text(encoding="utf-8"))
+        )
+        for d in sorted(shots_dir.iterdir(), key=lambda x: int(x.name))
+        if d.is_dir() and (d / "shot_description.json").exists()
+    ]
+
+    _preset_all_frame_events(pipeline, wd)
+
+    _task_progress(tid, f"并发生成 {len(shot_descriptions)} 个镜头的视频…")
+    await asyncio.gather(*[
+        pipeline.generate_video_for_single_shot(shot_description=sd)
+        for sd in shot_descriptions
+    ])
+    _task_progress(tid, "视频生成完成")
+
+
+async def _stage_concatenate(tid: str, wd: Path):
+    from moviepy import VideoFileClip, concatenate_videoclips
+
+    _task_progress(tid, "加载分镜顺序…")
+    storyboard = json.loads((wd / "storyboard.json").read_text(encoding="utf-8"))
+    shots_dir = wd / "shots"
+
+    _task_progress(tid, f"拼接 {len(storyboard)} 个镜头…")
+    clips = [
+        VideoFileClip(str(shots_dir / str(s["idx"]) / "video.mp4"))
+        for s in storyboard
+    ]
+    final = concatenate_videoclips(clips)
+    final_path = wd / "final_video.mp4"
+    final.write_videofile(str(final_path), codec="libx264", preset="medium")
+    _task_progress(tid, f"最终视频已保存：{final_path.name}")
 
 
 # ── 内部工具 ─────────────────────────────────────────────────────────────────

@@ -345,3 +345,116 @@ body { margin: 0; font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-s
 /* ── 空/加载状态 ── */
 .empty   { color: #475569; text-align: center; padding: 60px 0; font-size: 15px; }
 .loading { color: #64748b; text-align: center; padding: 60px 0; font-size: 15px; }
+
+/* ── 流水线面板 ── */
+.pipeline-panel { max-width: 780px; }
+
+.pipeline-meta { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.pipeline-meta-label { color: #94a3b8; font-size: 13px; width: 100%; margin-bottom: 4px; }
+.pipeline-meta-input { flex: 1; min-width: 200px; background: #252840; color: #e2e8f0; border: 1px solid #3d4266; border-radius: 8px; padding: 8px 12px; font-size: 13px; resize: vertical; outline: none; font-family: inherit; }
+.pipeline-meta-input:focus { border-color: #7c3aed; }
+
+.pipeline-stages { display: flex; flex-direction: column; gap: 12px; }
+
+.pipeline-stage-card { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; padding: 16px 20px; transition: border-color .2s; }
+.pipeline-stage-card.done { border-color: #22c55e44; }
+.pipeline-stage-card.running { border-color: #7c3aed88; }
+
+.pipeline-stage-header { display: flex; align-items: center; gap: 14px; }
+.pipeline-stage-icon { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+.pipeline-stage-card.done .pipeline-stage-icon { color: #22c55e; font-size: 18px; font-weight: 700; }
+.stage-pending-icon { color: #475569; font-size: 18px; }
+
+.pipeline-stage-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.pipeline-stage-name { font-size: 15px; font-weight: 600; color: #e2e8f0; }
+.pipeline-stage-detail { font-size: 12px; color: #64748b; }
+.pipeline-stage-card.done .pipeline-stage-detail { color: #22c55e99; }
+
+.pipeline-stage-body { margin-top: 10px; padding: 8px 12px; background: #252840; border-radius: 8px; font-size: 13px; color: #94a3b8; display: flex; align-items: center; gap: 8px; }
+.pipeline-task-msg { flex: 1; }
+
+.pipeline-stage-error { margin-top: 10px; padding: 8px 12px; background: #2d1515; border: 1px solid #7f1d1d; border-radius: 8px; font-size: 13px; color: #fca5a5; }
+
+.pipeline-stage-actions { display: flex; gap: 8px; margin-top: 14px; }
+.pipeline-run-btn { font-size: 13px; padding: 7px 18px; }
+.pipeline-force-btn { font-size: 12px; padding: 7px 14px; color: #94a3b8; }
+.pipeline-force-btn:hover:not(:disabled) { color: #e2e8f0; }
+
+/* ── 流水线 IO 区块 ── */
+.pipeline-stage-header { cursor: pointer; user-select: none; }
+.pipeline-stage-header:hover { background: #1e2133; border-radius: 8px; }
+.done-icon { color: #22c55e; font-size: 18px; font-weight: 700; }
+.pipeline-running-bar { margin-top: 8px; padding: 8px 12px; background: #252840; border-radius: 8px; font-size: 13px; color: #94a3b8; display: flex; align-items: center; gap: 8px; }
+
+.pipeline-io { margin-top: 14px; display: flex; flex-direction: column; gap: 14px; }
+.pipeline-io-block { background: #13151f; border: 1px solid #2d3148; border-radius: 10px; padding: 14px 16px; }
+.pipeline-io-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: #64748b; margin-bottom: 10px; }
+.pipeline-io-empty { color: #475569; font-size: 13px; font-style: italic; }
+.pipeline-io-summary { color: #94a3b8; font-size: 13px; }
+.pipeline-io-file { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #cbd5e1; padding: 4px 0; }
+.pipeline-io-file .file-icon { font-size: 14px; }
+.pipeline-io-file .file-path { color: #475569; font-size: 11px; margin-left: 4px; }
+.pipeline-io-tag { display: inline-block; background: #252840; color: #a78bfa; font-size: 12px; padding: 3px 10px; border-radius: 999px; margin: 3px 4px 3px 0; }
+.pipeline-io-row { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+.pipeline-io-label { color: #64748b; flex-shrink: 0; }
+.pipeline-io-value { color: #cbd5e1; }
+
+/* 角色 IO */
+.char-io-row { padding: 8px 0; border-bottom: 1px solid #1e2133; font-size: 13px; }
+.char-io-row:last-child { border-bottom: none; }
+.char-io-name { font-weight: 600; color: #a78bfa; display: block; margin-bottom: 2px; }
+.char-io-feat { color: #64748b; display: block; font-size: 12px; line-height: 1.5; }
+
+/* 肖像 IO */
+.portrait-io-row { padding: 8px 0; border-bottom: 1px solid #1e2133; }
+.portrait-io-row:last-child { border-bottom: none; }
+.portrait-io-name { font-size: 13px; font-weight: 600; color: #a78bfa; margin-bottom: 6px; display: block; }
+.portrait-io-imgs { display: flex; gap: 8px; }
+.portrait-io-item { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.portrait-io-item img { width: 72px; height: 108px; object-fit: cover; border-radius: 6px; cursor: pointer; background: #252840; }
+.portrait-io-item span { font-size: 10px; color: #64748b; }
+
+/* 分镜 IO */
+.storyboard-io-row { padding: 10px 0; border-bottom: 1px solid #1e2133; }
+.storyboard-io-row:last-child { border-bottom: none; }
+.storyboard-io-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.storyboard-io-visual { margin: 0; font-size: 12px; color: #94a3b8; line-height: 1.5; }
+.storyboard-io-audio { margin: 4px 0 0; font-size: 11px; color: #64748b; }
+
+/* 视觉描述拆解 IO */
+.decomp-io-row { padding: 10px 0; border-bottom: 1px solid #1e2133; }
+.decomp-io-row:last-child { border-bottom: none; }
+.decomp-io-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.decomp-io-fields { display: flex; flex-direction: column; gap: 6px; }
+.decomp-io-field { display: flex; gap: 8px; font-size: 12px; line-height: 1.5; }
+.decomp-io-label { color: #64748b; font-size: 11px; font-weight: 600; flex-shrink: 0; width: 28px; }
+
+/* 相机树 IO */
+.camera-io-row { padding: 10px 0; border-bottom: 1px solid #1e2133; font-size: 13px; }
+.camera-io-row:last-child { border-bottom: none; }
+.camera-io-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.camera-io-shots { color: #94a3b8; font-size: 12px; }
+.camera-io-parent { color: #64748b; font-size: 12px; }
+.camera-missing { color: #f87171; font-size: 11px; display: block; margin-top: 2px; }
+
+/* 帧图 IO */
+.frames-io-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+.frames-io-cell { display: flex; flex-direction: column; gap: 4px; }
+.frames-io-label { font-size: 11px; color: #64748b; text-align: center; }
+.frames-io-imgs { display: flex; gap: 4px; }
+.frames-io-img-wrap { position: relative; cursor: pointer; }
+.frames-io-img-wrap img { width: 120px; height: 68px; object-fit: cover; border-radius: 6px; background: #252840; display: block; }
+.frames-io-img-wrap:hover img { opacity: .85; }
+.frames-io-badge { position: absolute; bottom: 4px; left: 4px; background: #000a; color: #fff; font-size: 10px; padding: 1px 5px; border-radius: 4px; }
+.frames-io-empty-img { width: 120px; height: 68px; background: #1a1d27; border: 1px dashed #2d3148; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+.frames-io-empty-img span { font-size: 10px; color: #475569; }
+.frames-io-desc { margin: 0; font-size: 11px; color: #475569; max-width: 248px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 视频 IO */
+.videos-io-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+.videos-io-cell { display: flex; flex-direction: column; gap: 4px; }
+.videos-io-cell video { width: 200px; height: 113px; background: #0f1117; border-radius: 6px; display: block; }
+
+/* 最终视频 IO */
+.final-io-wrap { display: flex; flex-direction: column; gap: 8px; }
+.final-io-video { width: 100%; max-width: 640px; border-radius: 8px; background: #0f1117; }

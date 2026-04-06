@@ -38,6 +38,23 @@ createApp({
     const taskStatus = reactive({});
     const _pollers = {};
 
+    // ── 流水线阶段 ───────────────────────────────────────────────────────────
+    const pipelineStages = [
+      { key: "extract_characters",    label: "① 提取角色" },
+      { key: "generate_portraits",    label: "② 生成角色肖像" },
+      { key: "design_storyboard",     label: "③ 分镜设计" },
+      { key: "decompose_descriptions",label: "④ 视觉描述拆解" },
+      { key: "construct_camera_tree", label: "⑤ 构建相机树" },
+      { key: "generate_frames",       label: "⑥ 生成帧图" },
+      { key: "generate_videos",       label: "⑦ 生成视频" },
+      { key: "concatenate",           label: "⑧ 拼接最终视频" },
+    ];
+    const stagesStatus = reactive({});
+    const stageTasks = reactive({});  // stage.key -> {taskId, status, msg, error}
+    const stageExpanded = reactive({});
+    const userRequirement = ref("");
+    const storyboard = ref([]);  // List[ShotBriefDescription]
+
     // toast
     const toast = ref(null);
     let toastTimer = null;
@@ -71,6 +88,9 @@ createApp({
         cameraTree.value = data.camera_tree || [];
         hasFinalVideo.value = data.has_final_video || false;
         metadata.value = data.metadata || {};
+        storyboard.value = data.storyboard || [];
+        userRequirement.value = metadata.value.user_requirement || "";
+        await loadScriptFiles();
       } finally {
         loading.value = false;
       }
@@ -627,6 +647,114 @@ createApp({
     function triggerUploadInput() { document.getElementById("upload-input").click(); }
     function closeModal() { modal.value = null; }
 
+    // ── 流水线方法 ────────────────────────────────────────────────────────────
+    function toggleStageExpanded(key) {
+      stageExpanded[key] = !stageExpanded[key];
+    }
+
+    function stageStyle(key) {
+      const meta = metadata.value || {};
+      if (key === 'extract_characters') return meta.style || '（未设置）';
+      return '';
+    }
+
+    // 相机树辅助：按 cam_idx 分组镜头
+    function cameraGroups() {
+      const groups = {};
+      for (const cam of cameraTree.value) {
+        groups[cam.idx] = cam;
+      }
+      return cameraTree.value;
+    }
+
+    // 某个 shot 是否有 first_frame / last_frame
+    function shotHasFrame(shotIdx, type) {
+      const s = shots.value.find(s => s.idx === shotIdx);
+      return s ? (type === 'first' ? s.has_first_frame : s.has_last_frame) : false;
+    }
+
+    async function fetchStagesStatus() {
+      if (!currentProject.value) return;
+      try {
+        const res = await fetch(`/api/projects/${enc(currentProject.value)}/stages/status`);
+        if (!res.ok) return;
+        const data = await res.json();
+        Object.assign(stagesStatus, data);
+      } catch (e) { /* ignore */ }
+    }
+
+    function isStageRunning(key) {
+      const t = stageTasks[key];
+      return t && t.status === "running";
+    }
+
+    function stageTaskMsg(key) {
+      return stageTasks[key]?.msg || "";
+    }
+
+    function stageTaskError(key) {
+      const t = stageTasks[key];
+      return t?.status === "error" ? (t.error || "未知错误") : null;
+    }
+
+    async function runStage(key, force = false) {
+      if (!currentProject.value) return;
+      stageTasks[key] = { status: "running", msg: "启动中…", error: null, taskId: null };
+      try {
+        const res = await fetch(`/api/projects/${enc(currentProject.value)}/run/${key}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ force }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          stageTasks[key] = { status: "error", msg: "", error: data.detail || JSON.stringify(data), taskId: null };
+          return;
+        }
+        const tid = data.task_id;
+        stageTasks[key].taskId = tid;
+        _pollStageTask(key, tid);
+      } catch (e) {
+        stageTasks[key] = { status: "error", msg: "", error: e.message, taskId: null };
+      }
+    }
+
+    function _pollStageTask(key, tid) {
+      const interval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/tasks/${tid}`);
+          if (!res.ok) return;
+          const t = await res.json();
+          stageTasks[key].msg = t.status_msg || "";
+          if (t.status === "done") {
+            clearInterval(interval);
+            stageTasks[key].status = "done";
+            await fetchStagesStatus();
+            await loadProject(currentProject.value);
+            showToast(`阶段完成`, "info");
+          } else if (t.status === "error") {
+            clearInterval(interval);
+            stageTasks[key] = { status: "error", msg: "", error: t.error_msg || "未知错误", taskId: tid };
+            showToast(`阶段失败: ${t.error_msg}`, "error");
+          }
+        } catch (e) { /* ignore */ }
+      }, 2000);
+    }
+
+    async function saveUserRequirement() {
+      if (!currentProject.value) return;
+      try {
+        await fetch(`/api/projects/${enc(currentProject.value)}/metadata`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_requirement: userRequirement.value }),
+        });
+        showToast("已保存", "info");
+      } catch (e) {
+        showToast("保存失败: " + e.message, "error");
+      }
+    }
+
     // ── toast ────────────────────────────────────────────────────────────────
     function showToast(msg, type = "info") {
       if (toastTimer) clearTimeout(toastTimer);
@@ -665,6 +793,10 @@ createApp({
       frameRefsExpanded, frameRefsList,
       toggleFrameRefs, isFrameRefsExpanded,
       toggleFrameRef, refreshFrameRefs,
+      // 流水线
+      pipelineStages, stagesStatus, stageTasks, stageExpanded, userRequirement, storyboard,
+      fetchStagesStatus, runStage, isStageRunning, stageTaskMsg, stageTaskError,
+      saveUserRequirement, toggleStageExpanded, stageStyle, cameraGroups, shotHasFrame,
     };
   }
 }).mount("#app");
