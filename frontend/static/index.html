@@ -24,7 +24,6 @@
     <button class="tab-btn" :class="{active: activeTab==='pipeline'}"   @click="activeTab='pipeline';fetchStagesStatus()">流水线</button>
     <button class="tab-btn" :class="{active: activeTab==='shots'}"      @click="activeTab='shots'">镜头</button>
     <button class="tab-btn" :class="{active: activeTab==='characters'}" @click="activeTab='characters'">人物</button>
-    <button class="tab-btn" :class="{active: activeTab==='script'}"     @click="activeTab='script'">脚本</button>
     <button class="tab-btn" :class="{active: activeTab==='final'}"      @click="activeTab='final'">最终视频</button>
   </div>
 
@@ -55,10 +54,43 @@
         <div class="pipeline-io" v-if="stageExpanded.extract_characters">
           <div class="pipeline-io-block">
             <div class="pipeline-io-title">输入 · 脚本文件</div>
-            <div v-if="scriptFiles.length === 0" class="pipeline-io-empty">尚未添加脚本（请在"脚本"Tab 中添加）</div>
-            <div v-for="sf in scriptFiles" :key="sf" class="pipeline-io-file">
-              <span class="file-icon">📄</span>{{ sf.split('/').pop() }}
-              <span class="file-path">{{ sf }}</span>
+            <!-- 脚本文件列表 -->
+            <div v-if="scriptFiles.length === 0" class="pipeline-io-empty">尚未添加脚本</div>
+            <div class="script-file-list" v-if="scriptFiles.length > 0" style="margin-bottom:8px">
+              <button
+                v-for="sf in scriptFiles" :key="sf"
+                class="script-file-btn"
+                :class="{active: currentScriptFile===sf}"
+                @click="loadScript(sf)"
+              >{{ sf.split('/').pop() }}</button>
+            </div>
+            <!-- 添加脚本 -->
+            <div class="script-add" style="margin-bottom:10px">
+              <input class="script-path-input" v-model="newScriptPath" placeholder="粘贴脚本文件绝对路径…" @keyup.enter="addScript" />
+              <button class="btn btn-primary" @click="addScript">添加</button>
+            </div>
+            <!-- 脚本内容预览 -->
+            <div v-if="scriptLoading" class="loading" style="padding:8px 0">解析中...</div>
+            <div v-else-if="scriptData && scriptData.type==='text'" class="script-text-wrap" style="max-height:300px;overflow:auto">
+              <h4 class="script-title" style="margin:0 0 6px">{{ scriptData.filename }}</h4>
+              <pre class="script-text" style="font-size:12px">{{ scriptData.content }}</pre>
+            </div>
+            <div v-else-if="scriptData && scriptData.type==='docx'" class="script-docx-wrap" style="max-height:300px;overflow:auto">
+              <h4 class="script-title" style="margin:0 0 6px">{{ scriptData.title || scriptData.filename }}</h4>
+              <div class="script-table-wrap" v-for="(tbl, ti) in scriptData.tables" :key="ti">
+                <table class="script-table">
+                  <thead>
+                    <tr v-if="tbl[0] && tbl[0].is_header">
+                      <th v-for="(cell, ci) in tbl[0].cells" :key="ci">{{ cell }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, ri) in tbl.slice(1)" :key="ri" :class="{'section-row': isSectionRow(row)}">
+                      <td v-for="(cell, ci) in row.cells" :key="ci">{{ cell }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
           <div class="pipeline-io-block">
@@ -102,7 +134,8 @@
             <div v-for="char in characters" :key="char.idx" class="pipeline-io-tag">{{ char.identifier_in_scene }}</div>
             <div class="pipeline-io-row" style="margin-top:8px">
               <span class="pipeline-io-label">风格 (style)：</span>
-              <span class="pipeline-io-value">{{ metadata.style || '（未设置）' }}</span>
+              <input class="pipeline-meta-input" v-model="metadata.style" placeholder="输入画面风格…" style="width:100%" />
+              <button class="btn btn-ghost" style="margin-top:4px" @click="saveMetadataField('style', metadata.style)">保存风格</button>
             </div>
           </div>
           <div class="pipeline-io-block">
@@ -773,57 +806,6 @@
       </div>
     </div>
 
-    <!-- ══ 脚本 Tab ══ -->
-    <div v-else-if="activeTab==='script'">
-      <!-- 文件管理栏 -->
-      <div class="script-toolbar">
-        <div class="script-file-list">
-          <button
-            v-for="sf in scriptFiles" :key="sf"
-            class="script-file-btn"
-            :class="{active: currentScriptFile===sf}"
-            @click="loadScript(sf)"
-          >{{ sf.split('/').pop() }}</button>
-        </div>
-        <div class="script-add">
-          <input class="script-path-input" v-model="newScriptPath" placeholder="粘贴脚本文件绝对路径…" @keyup.enter="addScript" />
-          <button class="btn btn-primary" @click="addScript">添加</button>
-        </div>
-      </div>
-
-      <!-- 加载中 -->
-      <div v-if="scriptLoading" class="loading">解析中...</div>
-
-      <!-- 文本脚本 -->
-      <div v-else-if="scriptData && scriptData.type==='text'" class="script-text-wrap">
-        <h3 class="script-title">{{ scriptData.filename }}</h3>
-        <pre class="script-text">{{ scriptData.content }}</pre>
-      </div>
-
-      <!-- Docx 表格脚本 -->
-      <div v-else-if="scriptData && scriptData.type==='docx'" class="script-docx-wrap">
-        <h3 class="script-title">{{ scriptData.title || scriptData.filename }}</h3>
-        <div class="script-table-wrap" v-for="(tbl, ti) in scriptData.tables" :key="ti">
-          <table class="script-table">
-            <thead>
-              <tr v-if="tbl[0] && tbl[0].is_header">
-                <th v-for="(cell, ci) in tbl[0].cells" :key="ci">{{ cell }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, ri) in tbl.slice(1)" :key="ri" :class="{'section-row': isSectionRow(row)}">
-                <td v-for="(cell, ci) in row.cells" :key="ci">{{ cell }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div v-else-if="!scriptLoading" class="empty">
-        请添加脚本文件路径
-      </div>
-    </div>
-
     <!-- ══ 最终视频 Tab ══ -->
     <div v-else-if="activeTab==='final'">
       <div v-if="!hasFinalVideo" class="empty">最终视频尚未生成</div>
@@ -871,6 +853,6 @@
 </div>
 
 <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-<script src="/static/app.js"></script>
+<script type="module" src="/static/app.js"></script>
 </body>
 </html>
