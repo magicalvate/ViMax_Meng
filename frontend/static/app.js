@@ -18,6 +18,7 @@ createApp({
 
     const expandedShots = ref(new Set());
     const editingDesc = ref(new Set());
+    const frameRefsExpanded = ref({});  // `${shotIdx}_${ftKey}` -> bool
 
     // 脚本
     const scriptFiles = ref([]);
@@ -340,6 +341,48 @@ createApp({
       }
     }
 
+    // ── 帧参考图 ────────────────────────────────────────────────────────────
+    function frameRefsList(shot, ftKey) {
+      return (shot.frame_refs && shot.frame_refs[ftKey]) || [];
+    }
+
+    function toggleFrameRefs(shotIdx, ftKey) {
+      const key = `${shotIdx}_${ftKey}`;
+      frameRefsExpanded.value[key] = !frameRefsExpanded.value[key];
+    }
+    function isFrameRefsExpanded(shotIdx, ftKey) {
+      return !!frameRefsExpanded.value[`${shotIdx}_${ftKey}`];
+    }
+
+    async function toggleFrameRef(shot, frameType, ref) {
+      const newEnabled = !ref.enabled;
+      try {
+        const res = await fetch(
+          `/api/projects/${enc(currentProject.value)}/shots/${shot.idx}/frames/${frameType}/refs`,
+          { method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: ref.path, enabled: newEnabled }) }
+        );
+        if (!res.ok) throw new Error(await res.text());
+        ref.enabled = newEnabled;
+        showToast(newEnabled ? "参考图已启用" : "参考图已禁用（重生成时将排除）", "success");
+      } catch (e) {
+        showToast("操作失败: " + e.message, "error");
+      }
+    }
+
+    async function refreshFrameRefs(shot, frameType) {
+      const ftKey = `${frameType}_frame`;
+      try {
+        const res = await fetch(
+          `/api/projects/${enc(currentProject.value)}/shots/${shot.idx}/frames/${frameType}/refs`
+        );
+        if (res.ok) {
+          if (!shot.frame_refs) shot.frame_refs = {};
+          shot.frame_refs[ftKey] = await res.json();
+        }
+      } catch {}
+    }
+
     // ── AI 重新生成：帧 ──────────────────────────────────────────────────────
     async function regenerateFrame(shot, frameType) {
       const key = `frame_${shot.idx}_${frameType}`;
@@ -357,6 +400,7 @@ createApp({
           shot[`has_${frameType}_frame`] = true;
           shot[`${asset}_enabled`] = true;
           await refreshShotVersions(shot);
+          await refreshFrameRefs(shot, frameType);
           showToast(`Shot ${shot.idx} ${frameType === "first" ? "首帧" : "末帧"}已重新生成`, "success");
         });
       } catch (e) {
@@ -617,6 +661,10 @@ createApp({
       // 参考人物编辑
       charPickerShot, toggleCharPicker, isCharPickerOpen,
       availableCharsToAdd, addVisChar, removeVisChar,
+      // 帧参考图
+      frameRefsExpanded, frameRefsList,
+      toggleFrameRefs, isFrameRefsExpanded,
+      toggleFrameRef, refreshFrameRefs,
     };
   }
 }).mount("#app");

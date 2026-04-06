@@ -32,6 +32,7 @@ class ImageGeneratorNanobananaGoogleAPI:
         prompt: str,
         reference_image_paths: List[str] = [],
         aspect_ratio: Optional[str] = "16:9",
+        temperature: Optional[float] = None,
         **kwargs,
     ) -> ImageOutput:
 
@@ -53,6 +54,9 @@ class ImageGeneratorNanobananaGoogleAPI:
 
         for attempt in range(max_retries):
             try:
+                config_kwargs = {}
+                if temperature is not None:
+                    config_kwargs["temperature"] = temperature
                 response = await self.client.aio.models.generate_content(
                     model=self.model,
                     contents=reference_images + [prompt],
@@ -61,6 +65,7 @@ class ImageGeneratorNanobananaGoogleAPI:
                         image_config=types.ImageConfig(
                             aspect_ratio=aspect_ratio,
                         ),
+                        **config_kwargs,
                     ),
                 )
                 break

@@ -137,6 +137,24 @@
                   <span class="empty-icon">＋</span>
                   <span class="empty-text">点击上传首帧</span>
                 </div>
+                <!-- 生成参考图 -->
+                <div class="frame-refs" v-if="frameRefsList(shot,'first_frame').length > 0">
+                  <div class="frame-refs-header" @click.stop="toggleFrameRefs(shot.idx,'first_frame')">
+                    <span class="frame-refs-label">生成参考图 ({{ frameRefsList(shot,'first_frame').length }})</span>
+                    <span class="chevron-sm" :class="{open: isFrameRefsExpanded(shot.idx,'first_frame')}">▾</span>
+                  </div>
+                  <div v-if="isFrameRefsExpanded(shot.idx,'first_frame')" class="frame-refs-list">
+                    <div class="frame-ref-item" v-for="(ref, i) in frameRefsList(shot,'first_frame')" :key="i"
+                      :class="{disabled: !ref.enabled}">
+                      <img :src="ref.url" :title="ref.description"
+                        @error="$event.target.style.opacity='0.15'"
+                        @click.stop="openLightbox(ref.url)" />
+                      <div class="frame-ref-status"
+                        :title="ref.enabled ? '点击禁用（重生成时排除）' : '点击启用'"
+                        @click.stop="toggleFrameRef(shot,'first',ref)">{{ ref.enabled ? '✓' : '✗' }}</div>
+                    </div>
+                  </div>
+                </div>
                 <!-- 版本历史 -->
                 <div class="version-strip" v-if="shotVersionList(shot,'first_frame').length > 0">
                   <div class="version-item" v-for="v in shotVersionList(shot,'first_frame')" :key="v.id"
@@ -229,6 +247,24 @@
                 <div class="frame-empty" v-else @click="openFrameModal(shot,'last')">
                   <span class="empty-icon">＋</span>
                   <span class="empty-text">点击上传末帧</span>
+                </div>
+                <!-- 生成参考图 -->
+                <div class="frame-refs" v-if="frameRefsList(shot,'last_frame').length > 0">
+                  <div class="frame-refs-header" @click.stop="toggleFrameRefs(shot.idx,'last_frame')">
+                    <span class="frame-refs-label">生成参考图 ({{ frameRefsList(shot,'last_frame').length }})</span>
+                    <span class="chevron-sm" :class="{open: isFrameRefsExpanded(shot.idx,'last_frame')}">▾</span>
+                  </div>
+                  <div v-if="isFrameRefsExpanded(shot.idx,'last_frame')" class="frame-refs-list">
+                    <div class="frame-ref-item" v-for="(ref, i) in frameRefsList(shot,'last_frame')" :key="i"
+                      :class="{disabled: !ref.enabled}">
+                      <img :src="ref.url" :title="ref.description"
+                        @error="$event.target.style.opacity='0.15'"
+                        @click.stop="openLightbox(ref.url)" />
+                      <div class="frame-ref-status"
+                        :title="ref.enabled ? '点击禁用（重生成时排除）' : '点击启用'"
+                        @click.stop="toggleFrameRef(shot,'last',ref)">{{ ref.enabled ? '✓' : '✗' }}</div>
+                    </div>
+                  </div>
                 </div>
                 <!-- 版本历史 -->
                 <div class="version-strip" v-if="shotVersionList(shot,'last_frame').length > 0">

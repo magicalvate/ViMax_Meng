@@ -157,6 +157,53 @@ def _load_style(wd: Path) -> str:
 
 # ── Frame 启用/禁用状态 ────────────────────────────────────────────────────────
 
+def _abs_to_rel_path(wd: Path, abs_path: str) -> str:
+    try:
+        return str(Path(abs_path).relative_to(wd)).replace("\\", "/")
+    except ValueError:
+        return abs_path
+
+
+def _ref_overrides_path(shot_dir: Path, ft_key: str) -> Path:
+    return shot_dir / f"{ft_key}_ref_overrides.json"
+
+
+def _load_ref_overrides(shot_dir: Path, ft_key: str) -> set:
+    p = _ref_overrides_path(shot_dir, ft_key)
+    if not p.exists():
+        return set()
+    return set(json.loads(p.read_text(encoding="utf-8")).get("disabled_paths", []))
+
+
+def _save_ref_overrides(shot_dir: Path, ft_key: str, disabled_paths: set):
+    _ref_overrides_path(shot_dir, ft_key).write_text(
+        json.dumps({"disabled_paths": sorted(disabled_paths)}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _load_frame_refs(wd: Path, project: str, shot_dir: Path, ft_key: str) -> List[Dict]:
+    selector_path = shot_dir / f"{ft_key}_selector_output.json"
+    if not selector_path.exists():
+        return []
+    try:
+        selector = json.loads(selector_path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    pairs = selector.get("reference_image_path_and_text_pairs", [])
+    disabled = _load_ref_overrides(shot_dir, ft_key)
+    refs = []
+    for abs_path, desc in pairs:
+        rel = _abs_to_rel_path(wd, abs_path)
+        refs.append({
+            "path": abs_path,
+            "url": f"/files/{project}/{rel}",
+            "description": desc,
+            "enabled": abs_path not in disabled,
+        })
+    return refs
+
+
 def _frame_state_path(shot_dir: Path) -> Path:
     return shot_dir / "frame_state.json"
 
@@ -338,6 +385,10 @@ async def get_project_data(project: str):
                 scene_refs.append({"filename": f.name, "path": f"shots/{idx}/{f.name}", "readonly": True})
             has_ff = (shot_dir / "first_frame.png").exists()
             has_lf = (shot_dir / "last_frame.png").exists()
+            frame_refs = {}
+            for ft_key in ("first_frame", "last_frame"):
+                if (shot_dir / f"{ft_key}.png").exists():
+                    frame_refs[ft_key] = _load_frame_refs(wd, project, shot_dir, ft_key)
             shots.append({
                 "idx": idx,
                 "description": desc,
@@ -347,6 +398,7 @@ async def get_project_data(project: str):
                 "first_frame_enabled": _is_frame_enabled(shot_dir, "first_frame") if has_ff else False,
                 "last_frame_enabled": _is_frame_enabled(shot_dir, "last_frame") if has_lf else False,
                 "scene_refs": scene_refs,
+                "frame_refs": frame_refs,
                 "versions": _shot_version_urls(project, idx, shot_dir),
             })
 
@@ -488,6 +540,35 @@ async def set_frame_enabled(project: str, shot_idx: int, frame_type: str, reques
     enabled = bool(body.get("enabled", True))
     _set_frame_enabled(shot_dir, ft_key, enabled)
     return {"ok": True, "enabled": enabled}
+
+
+@app.get("/api/projects/{project}/shots/{shot_idx}/frames/{frame_type}/refs")
+async def get_frame_refs(project: str, shot_idx: int, frame_type: str):
+    if frame_type not in ("first", "last"):
+        raise HTTPException(400, "frame_type must be first/last")
+    wd = _wd(project)
+    shot_dir = wd / "shots" / str(shot_idx)
+    ft_key = f"{frame_type}_frame"
+    return _load_frame_refs(wd, project, shot_dir, ft_key)
+
+
+@app.patch("/api/projects/{project}/shots/{shot_idx}/frames/{frame_type}/refs")
+async def toggle_frame_ref(project: str, shot_idx: int, frame_type: str, request: Request):
+    if frame_type not in ("first", "last"):
+        raise HTTPException(400, "frame_type must be first/last")
+    wd = _wd(project)
+    shot_dir = wd / "shots" / str(shot_idx)
+    ft_key = f"{frame_type}_frame"
+    body = await request.json()
+    path = body.get("path", "")
+    enabled = bool(body.get("enabled", True))
+    disabled = _load_ref_overrides(shot_dir, ft_key)
+    if enabled:
+        disabled.discard(path)
+    else:
+        disabled.add(path)
+    _save_ref_overrides(shot_dir, ft_key, disabled)
+    return {"ok": True, "path": path, "enabled": enabled}
 
 
 @app.delete("/api/projects/{project}/shots/{shot_idx}/frames/{frame_type}")
@@ -696,6 +777,12 @@ async def _run_regenerate_frame(tid: str, pipeline, wd: Path, shot_idx: int, fra
         _setup_frame_events(pipeline, wd, shot_idx, ft_key)
 
         _task_progress(tid, "图像生成 API 调用中…")
+        variation_hint = (
+            "IMPORTANT: Generate a noticeably different visual composition compared to any previous version. "
+            "Explore a different camera framing, lighting direction, character pose, or spatial arrangement "
+            "while keeping the scene description accurate and character appearances consistent with the reference images."
+        )
+        excluded_ref_paths = list(_load_ref_overrides(shot_dir, ft_key))
         await pipeline.generate_frame_for_single_shot(
             shot_idx=shot_idx,
             frame_type=ft_key,
@@ -703,6 +790,8 @@ async def _run_regenerate_frame(tid: str, pipeline, wd: Path, shot_idx: int, fra
             frame_desc=frame_desc,
             visible_characters=visible_chars,
             character_portraits_registry=registry,
+            prompt_suffix=variation_hint,
+            excluded_ref_paths=excluded_ref_paths,
         )
         # 归档版本，并确保启用状态
         _task_progress(tid, "归档版本…")

@@ -58,6 +58,10 @@ body { margin: 0; font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-s
 .action-btn.danger:hover { background: #450a0a; color: #fca5a5; border-color: #dc2626; }
 .action-btn.active { background: #2d1d6e; border-color: #7c3aed; color: #c4b5fd; }
 .action-btn:disabled { opacity: .4; cursor: not-allowed; }
+.action-btn.frame-toggle.enabled { border-color: #16a34a; color: #86efac; }
+.action-btn.frame-toggle.enabled:hover { background: #14532d; border-color: #22c55e; color: #bbf7d0; }
+.action-btn.frame-toggle.disabled { border-color: #7f1d1d; color: #f87171; }
+.action-btn.frame-toggle.disabled:hover { background: #450a0a; border-color: #dc2626; color: #fca5a5; }
 
 /* ── Task 状态 badge ── */
 .task-badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; max-width: 260px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -107,8 +111,11 @@ body { margin: 0; font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-s
   z-index: 3; pointer-events: none;
 }
 .generating-msg { font-size: 12px; color: #93c5fd; max-width: 90%; text-align: center; }
-.frame-img { width: 100%; aspect-ratio: 16/9; object-fit: cover; border-radius: 8px; border: 2px solid #2d3148; cursor: zoom-in; display: block; transition: border-color .15s; }
+.frame-img { width: 100%; aspect-ratio: 16/9; object-fit: cover; border-radius: 8px; border: 2px solid #2d3148; cursor: zoom-in; display: block; transition: border-color .15s, opacity .15s, filter .15s; }
 .frame-img:hover { border-color: #7c3aed; }
+.frame-img.frame-disabled { opacity: 0.35; border-color: #7f1d1d; filter: grayscale(60%); }
+.frame-disabled-overlay { position: absolute; inset: 0; border-radius: 8px; background: rgba(15,17,23,.55); display: flex; align-items: center; justify-content: center; z-index: 2; pointer-events: none; }
+.disabled-label { color: #f87171; font-size: 13px; font-weight: 700; background: rgba(127,29,29,.75); padding: 4px 14px; border-radius: 6px; letter-spacing: 0.5px; border: 1px solid rgba(248,113,113,.4); }
 .frame-replace-btn { position: absolute; bottom: 8px; right: 8px; background: rgba(124,58,237,.88); color: #fff; border: none; border-radius: 6px; padding: 4px 12px; font-size: 11px; cursor: pointer; opacity: 0; transition: opacity .15s; }
 .frame-img-wrap:hover .frame-replace-btn { opacity: 1; }
 
@@ -257,6 +264,44 @@ body { margin: 0; font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-s
 .toast.success { border-color: #16a34a; color: #86efac; }
 .toast.error   { border-color: #dc2626; color: #fca5a5; }
 @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* ── 帧参考图 ── */
+.frame-refs { margin-top: 6px; }
+.frame-refs-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 8px; background: #0f1117; border-radius: 6px 6px 6px 6px;
+  cursor: pointer; transition: background .12s; user-select: none;
+}
+.frame-refs-header:hover { background: #1a1d27; }
+.frame-refs-label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+.chevron-sm { color: #475569; font-size: 11px; transition: transform .2s; }
+.chevron-sm.open { transform: rotate(180deg); }
+.frame-refs-list {
+  display: flex; gap: 5px; flex-wrap: wrap;
+  padding: 6px; background: #0a0c12;
+  border: 1px solid #1e2035; border-top: none;
+  border-radius: 0 0 6px 6px;
+}
+.frame-ref-item {
+  position: relative; cursor: pointer; border-radius: 5px;
+  border: 2px solid #2d3148; overflow: hidden; flex-shrink: 0;
+  transition: border-color .15s, opacity .15s;
+  width: 56px;
+}
+.frame-ref-item:hover { border-color: #7c3aed; }
+.frame-ref-item.disabled { opacity: 0.38; border-color: #7f1d1d; }
+.frame-ref-item.disabled:hover { border-color: #dc2626; opacity: 0.55; }
+.frame-ref-item img { display: block; width: 52px; height: 52px; object-fit: cover; cursor: zoom-in; }
+.frame-ref-status {
+  position: absolute; top: 2px; right: 2px;
+  background: rgba(0,0,0,.80); color: #86efac;
+  font-size: 9px; width: 16px; height: 16px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 3px; font-weight: 700; line-height: 1;
+  cursor: pointer; transition: background .12s, color .12s;
+}
+.frame-ref-status:hover { background: rgba(124,58,237,.9); color: #fff; }
+.frame-ref-item.disabled .frame-ref-status { color: #f87171; }
 
 /* ── 版本历史条 ── */
 .version-strip {

@@ -346,6 +346,8 @@ class Script2VideoPipeline:
         frame_desc: str,
         visible_characters: List[CharacterInScene],
         character_portraits_registry: Dict[str, Dict[str, Dict[str, str]]],
+        prompt_suffix: Optional[str] = None,
+        excluded_ref_paths: List[str] = [],
     ) -> ImageOutput:
 
         frame_image_path = os.path.join(self.working_dir, "shots", f"{shot_idx}", f"{frame_type}.png")
@@ -364,6 +366,13 @@ class Script2VideoPipeline:
 
             if first_shot_ff_path_and_text_pair is not None:
                 available_image_path_and_text_pairs.append(first_shot_ff_path_and_text_pair)
+
+            if excluded_ref_paths:
+                excluded_set = set(excluded_ref_paths)
+                available_image_path_and_text_pairs = [
+                    (p, t) for p, t in available_image_path_and_text_pairs
+                    if p not in excluded_set
+                ]
 
             selector_output_path = os.path.join(self.working_dir, "shots", f"{shot_idx}", f"{frame_type}_selector_output.json")
             if os.path.exists(selector_output_path):
@@ -385,6 +394,8 @@ class Script2VideoPipeline:
             for i, (image_path, text) in enumerate(reference_image_path_and_text_pairs):
                 prefix_prompt += f"Image {i}: {text}\n"
             prompt = f"{prefix_prompt}\n{prompt}"
+            if prompt_suffix:
+                prompt = f"{prompt}\n\n{prompt_suffix}"
             reference_image_paths = [item[0] for item in reference_image_path_and_text_pairs]
 
             frame_image: ImageOutput = await self.image_generator.generate_single_image(
