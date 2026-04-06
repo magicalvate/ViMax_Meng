@@ -1,5 +1,6 @@
 # https://ai.google.dev/gemini-api/docs/image-generation
 
+import io
 import logging
 import asyncio
 from PIL import Image
@@ -64,7 +65,7 @@ class ImageGeneratorNanobananaGoogleAPI:
                 )
                 break
             except ClientError as e:
-                if e.status_code == 429 and attempt < max_retries - 1:
+                if e.code == 429 and attempt < max_retries - 1:
                     wait_time = retry_delay * (2 ** attempt)
                     logging.warning(f"Rate limit hit (429), retrying in {wait_time}s... (attempt {attempt + 1}/{max_retries})")
                     await asyncio.sleep(wait_time)
@@ -77,7 +78,8 @@ class ImageGeneratorNanobananaGoogleAPI:
             if part.text is not None:
                 text += part.text
             elif part.inline_data is not None:
-                image = part.as_image()
+                genai_image = part.as_image()
+                image = Image.open(io.BytesIO(genai_image.image_bytes))
 
         if image is None:
             logging.error(f"No image generated. The response text is: {text}")

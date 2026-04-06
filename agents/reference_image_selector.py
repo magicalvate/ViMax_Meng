@@ -211,8 +211,9 @@ class ReferenceImageSelector:
         chain = self.chat_model | parser
 
         try:
-            response = await chain.ainvoke(messages)        
-            reference_image_path_and_text_pairs = [filtered_image_path_and_text_pairs[i] for i in response.ref_image_indices]
+            response = await chain.ainvoke(messages)
+            valid_indices = [i for i in response.ref_image_indices if i < len(filtered_image_path_and_text_pairs)]
+            reference_image_path_and_text_pairs = [filtered_image_path_and_text_pairs[i] for i in valid_indices]
             return {
                 "reference_image_path_and_text_pairs": reference_image_path_and_text_pairs,
                 "text_prompt": response.text_prompt,

@@ -14,7 +14,7 @@ class ImageGeneratorDoubaoSeedreamYunwuAPI:
         self,
         api_key: str,
         model: str = "doubao-seedream-4-0-250828",
-
+        rate_limiter=None,
     ):
         self.api_key = api_key
         self.base_url = "https://yunwu.ai/v1/images/generations"
@@ -46,7 +46,7 @@ class ImageGeneratorDoubaoSeedreamYunwuAPI:
             # "sequential_image_generation_options": {
             #     "max_images": 1
             # },
-            "response_format": "url",
+            "response_format": "b64_json",
             "size": size if size is not None else "1024x1024",
         }
         if len(image) > 0:
@@ -65,5 +65,8 @@ class ImageGeneratorDoubaoSeedreamYunwuAPI:
             logging.error(f"Error occurred while generating image: {e}")
             raise e
 
-        data = response_json['data'][0]['url']
-        return ImageOutput(fmt="url", ext="png", data=data)
+        if 'data' not in response_json:
+            logging.error(f"Unexpected API response: {response_json}")
+            raise KeyError('data')
+        data = response_json['data'][0]['b64_json']
+        return ImageOutput(fmt="b64", ext="png", data=data)

@@ -26,6 +26,8 @@ class VideoOutput:
         Args:
             path (str): Path where the video will be saved.
         """
+        with open(path + ".url", "w") as f:
+            f.write(self.data)
         download_video(self.data, path)
 
     def save_bytes(self, path: str) -> None:

@@ -9,6 +9,33 @@ wheels/
 # Virtual environments
 .venv
 
-# working directory
+# Working directories and test outputs
 .working_dir/
 .test/
+
+# Configs (contain API keys — never commit real credentials)
+configs/
+
+# Local data / user content
+data_folder/
+
+# IDE and editor settings
+.vscode/
+.obsidian/
+.idea/
+
+# Claude Code local settings
+.claude/
+
+# Local test / scratch scripts
+#main_*_test.py
+
+# Planning / personal notes
+planner.md
+agents/intro.md
+
+# Windows Office temp lock files
+~$*
+
+# macOS metadata
+.DS_Store

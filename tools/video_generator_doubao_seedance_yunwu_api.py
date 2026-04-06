@@ -13,6 +13,8 @@ class VideoGeneratorDoubaoSeedanceYunwuAPI:
         t2v_model: str = "doubao-seedance-1-0-lite-t2v-250428",
         ff2v_model: str = "doubao-seedance-1-0-lite-i2v-250428",
         flf2v_model: str = "doubao-seedance-1-0-lite-i2v-250428",
+        rate_limiter=None,
+        
     ):
         self.api_key = api_key
         self.t2v_model = t2v_model
@@ -95,10 +97,10 @@ class VideoGeneratorDoubaoSeedanceYunwuAPI:
                 async with aiohttp.ClientSession() as session:
                     async with session.post(url, headers=headers, json=payload) as response:
                         response_json = await response.json()
-                        logging.debug(f"Response: {response_json}")
+                        logging.error(f"Video API response: {response_json}")
                         task_id = response_json["id"]
             except Exception as e:
-                logging.error(f"Error occurred while creating video generation task.\nRetrying in 1 seconds...")
+                logging.error(f"Error occurred while creating video generation task: {e}\nRetrying in 1 seconds...")
                 await asyncio.sleep(1)
                 continue
             break
