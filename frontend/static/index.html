@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-<div id="app">
+<div id="app" @click="charPickerShot = null">
 
   <!-- 顶部栏 -->
   <div class="topbar">
@@ -41,6 +41,9 @@
           <!-- 折叠头 -->
           <div class="shot-header" @click="toggleShot(shot.idx)">
             <span class="shot-num">Shot {{ shot.idx }}</span>
+            <span v-if="shot.description != null && shot.description.cam_idx != null" class="cam-badge">
+              机位 {{ shot.description.cam_idx }}
+            </span>
             <span v-if="shot.description" class="variation-badge" :class="shot.description.variation_type">
               {{ shot.description.variation_type }}
             </span>
@@ -73,6 +76,22 @@
               </div>
             </div>
 
+            <!-- 机位信息 -->
+            <div class="cam-info-panel" v-if="shot.description != null && shot.description.cam_idx != null">
+              <span class="cam-info-label">机位 {{ shot.description.cam_idx }}</span>
+              <template v-if="shotCamera(shot)">
+                <span class="cam-info-item" title="该机位覆盖的所有镜头">
+                  覆盖镜头：{{ shotCamera(shot).active_shot_idxs.map(i => 'Shot ' + i).join('、') }}
+                </span>
+                <span class="cam-info-item" v-if="shotCamera(shot).parent_cam_idx != null">
+                  父机位：机位 {{ shotCamera(shot).parent_cam_idx }}
+                  <span v-if="shotCamera(shot).is_parent_fully_covers_child != null">
+                    （{{ shotCamera(shot).is_parent_fully_covers_child ? '完全覆盖' : '部分覆盖' }}）
+                  </span>
+                </span>
+              </template>
+            </div>
+
             <!-- 四格 grid -->
             <div class="shot-grid">
 
@@ -81,26 +100,72 @@
                 <div class="cell-header">
                   <p class="section-label">首帧</p>
                   <div class="cell-actions">
-                    <span class="task-badge running" v-if="isRunning(`frame_${shot.idx}_first`)">生成中…</span>
+                    <span class="task-badge running" v-if="isRunning(`frame_${shot.idx}_first`)">{{ taskMsg(`frame_${shot.idx}_first`) }}</span>
                     <span class="task-badge done"    v-else-if="taskState(`frame_${shot.idx}_first`)?.status==='done'">✓</span>
                     <button class="action-btn regen" :disabled="isRunning(`frame_${shot.idx}_first`)"
                       @click="regenerateFrame(shot,'first')" title="AI 重新生成">↺ 重新生成</button>
+                    <button class="action-btn frame-toggle"
+                      :class="shot.first_frame_enabled ? 'enabled' : 'disabled'"
+                      v-if="shot.has_first_frame && !isRunning(`frame_${shot.idx}_first`)"
+                      @click="toggleFrameEnabled(shot,'first')"
+                      :title="shot.first_frame_enabled ? '点击禁用（不用于视频生成）' : '点击启用（用于视频生成）'">
+                      {{ shot.first_frame_enabled ? '已启用' : '已禁用' }}
+                    </button>
                   </div>
                 </div>
-                <div class="frame-img-wrap" v-if="shot.has_first_frame">
-                  <img class="frame-img" :src="shotFileUrl(shot.idx,'first_frame.png')" alt="first frame"
+                <div class="task-error-msg" v-if="taskError(`frame_${shot.idx}_first`)">
+                  <span>{{ taskError(`frame_${shot.idx}_first`) }}</span>
+                  <button @click="clearTaskError(`frame_${shot.idx}_first`)">✕</button>
+                </div>
+                <div class="frame-img-wrap" v-if="shot.has_first_frame || isRunning(`frame_${shot.idx}_first`)">
+                  <img class="frame-img" :class="{'frame-disabled': !shot.first_frame_enabled}"
+                    :src="isRunning(`frame_${shot.idx}_first`) && taskPreviewUrl(`frame_${shot.idx}_first`)
+                      ? taskPreviewUrl(`frame_${shot.idx}_first`)
+                      : shotFileUrl(shot.idx,'first_frame.png')"
+                    alt="first frame"
                     @click="openLightbox(shotFileUrl(shot.idx,'first_frame.png'))" />
-                  <button class="frame-replace-btn" @click.stop="openFrameModal(shot,'first')">替换</button>
+                  <div class="frame-disabled-overlay" v-if="!shot.first_frame_enabled && !isRunning(`frame_${shot.idx}_first`)">
+                    <span class="disabled-label">已禁用</span>
+                  </div>
+                  <div class="generating-overlay" v-if="isRunning(`frame_${shot.idx}_first`)">
+                    <span class="spinner"></span>
+                    <span class="generating-msg">{{ taskMsg(`frame_${shot.idx}_first`) }}</span>
+                  </div>
+                  <button class="frame-replace-btn" v-if="!isRunning(`frame_${shot.idx}_first`)" @click.stop="openFrameModal(shot,'first')">替换</button>
                 </div>
                 <div class="frame-empty" v-else @click="openFrameModal(shot,'first')">
                   <span class="empty-icon">＋</span>
                   <span class="empty-text">点击上传首帧</span>
                 </div>
+                <!-- 版本历史 -->
+                <div class="version-strip" v-if="shotVersionList(shot,'first_frame').length > 0">
+                  <div class="version-item" v-for="v in shotVersionList(shot,'first_frame')" :key="v.id"
+                    :class="{selected: v.selected}" @click="selectShotVersion(shot,'first_frame',v.id)" :title="v.created_at">
+                    <img :src="v.url" />
+                    <span class="version-time">{{ formatVersionTime(v.created_at) }}</span>
+                    <button class="version-del" @click.stop="deleteShotVersion(shot,'first_frame',v.id)">✕</button>
+                  </div>
+                </div>
               </div>
 
               <!-- ② 参考人物 -->
               <div class="chars-cell">
-                <p class="section-label">参考人物</p>
+                <div class="cell-header">
+                  <p class="section-label">参考人物</p>
+                  <div class="char-picker-wrap">
+                    <button class="action-btn" @click.stop="toggleCharPicker(shot.idx)"
+                      :class="{active: isCharPickerOpen(shot.idx)}">＋ 添加角色</button>
+                    <div class="char-picker-dropdown" v-if="isCharPickerOpen(shot.idx)" @click.stop>
+                      <div v-if="availableCharsToAdd(shot).length === 0" class="char-picker-empty">所有角色均已添加</div>
+                      <div v-for="char in availableCharsToAdd(shot)" :key="char.idx"
+                        class="char-picker-item" @click="addVisChar(shot, char.idx)">
+                        <img :src="portraitUrl(char.identifier_in_scene,'front')"
+                          @error="$event.target.style.opacity='0.2'" />
+                        <span>{{ char.identifier_in_scene }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 <div class="chars-scroll">
                   <template v-if="visibleCharPortraits(shot).length > 0">
                     <div class="char-portrait-wrap" v-for="cp in visibleCharPortraits(shot)" :key="cp.charName">
@@ -115,10 +180,11 @@
                         <button class="char-action-btn" @click.stop="openPortraitModal(cp.charName,cp.charIdx,'front')">替换</button>
                         <button class="char-action-btn regen" :disabled="isRunning(`portrait_${cp.charIdx}_front`)"
                           @click.stop="regeneratePortrait(cp.charName,cp.charIdx,'front')">↺</button>
+                        <button class="char-action-btn danger" @click.stop="removeVisChar(shot, cp.charIdx)" title="从本镜头移除">✕</button>
                       </div>
                     </div>
                   </template>
-                  <span class="chars-empty" v-else>本镜头无可见角色</span>
+                  <span class="chars-empty" v-else>点击"添加角色"选择参考人物</span>
                 </div>
               </div>
 
@@ -127,20 +193,51 @@
                 <div class="cell-header">
                   <p class="section-label">末帧</p>
                   <div class="cell-actions">
-                    <span class="task-badge running" v-if="isRunning(`frame_${shot.idx}_last`)">生成中…</span>
+                    <span class="task-badge running" v-if="isRunning(`frame_${shot.idx}_last`)">{{ taskMsg(`frame_${shot.idx}_last`) }}</span>
                     <span class="task-badge done"    v-else-if="taskState(`frame_${shot.idx}_last`)?.status==='done'">✓</span>
                     <button class="action-btn regen" :disabled="isRunning(`frame_${shot.idx}_last`)"
                       @click="regenerateFrame(shot,'last')" title="AI 重新生成">↺ 重新生成</button>
+                    <button class="action-btn frame-toggle"
+                      :class="shot.last_frame_enabled ? 'enabled' : 'disabled'"
+                      v-if="shot.has_last_frame && !isRunning(`frame_${shot.idx}_last`)"
+                      @click="toggleFrameEnabled(shot,'last')"
+                      :title="shot.last_frame_enabled ? '点击禁用（不用于视频生成）' : '点击启用（用于视频生成）'">
+                      {{ shot.last_frame_enabled ? '已启用' : '已禁用' }}
+                    </button>
                   </div>
                 </div>
-                <div class="frame-img-wrap" v-if="shot.has_last_frame">
-                  <img class="frame-img" :src="shotFileUrl(shot.idx,'last_frame.png')" alt="last frame"
+                <div class="task-error-msg" v-if="taskError(`frame_${shot.idx}_last`)">
+                  <span>{{ taskError(`frame_${shot.idx}_last`) }}</span>
+                  <button @click="clearTaskError(`frame_${shot.idx}_last`)">✕</button>
+                </div>
+                <div class="frame-img-wrap" v-if="shot.has_last_frame || isRunning(`frame_${shot.idx}_last`)">
+                  <img class="frame-img" :class="{'frame-disabled': !shot.last_frame_enabled}"
+                    :src="isRunning(`frame_${shot.idx}_last`) && taskPreviewUrl(`frame_${shot.idx}_last`)
+                      ? taskPreviewUrl(`frame_${shot.idx}_last`)
+                      : shotFileUrl(shot.idx,'last_frame.png')"
+                    alt="last frame"
                     @click="openLightbox(shotFileUrl(shot.idx,'last_frame.png'))" />
-                  <button class="frame-replace-btn" @click.stop="openFrameModal(shot,'last')">替换</button>
+                  <div class="frame-disabled-overlay" v-if="!shot.last_frame_enabled && !isRunning(`frame_${shot.idx}_last`)">
+                    <span class="disabled-label">已禁用</span>
+                  </div>
+                  <div class="generating-overlay" v-if="isRunning(`frame_${shot.idx}_last`)">
+                    <span class="spinner"></span>
+                    <span class="generating-msg">{{ taskMsg(`frame_${shot.idx}_last`) }}</span>
+                  </div>
+                  <button class="frame-replace-btn" v-if="!isRunning(`frame_${shot.idx}_last`)" @click.stop="openFrameModal(shot,'last')">替换</button>
                 </div>
                 <div class="frame-empty" v-else @click="openFrameModal(shot,'last')">
                   <span class="empty-icon">＋</span>
                   <span class="empty-text">点击上传末帧</span>
+                </div>
+                <!-- 版本历史 -->
+                <div class="version-strip" v-if="shotVersionList(shot,'last_frame').length > 0">
+                  <div class="version-item" v-for="v in shotVersionList(shot,'last_frame')" :key="v.id"
+                    :class="{selected: v.selected}" @click="selectShotVersion(shot,'last_frame',v.id)" :title="v.created_at">
+                    <img :src="v.url" />
+                    <span class="version-time">{{ formatVersionTime(v.created_at) }}</span>
+                    <button class="version-del" @click.stop="deleteShotVersion(shot,'last_frame',v.id)">✕</button>
+                  </div>
                 </div>
               </div>
 
@@ -170,17 +267,39 @@
               <div class="cell-header">
                 <h4>镜头视频</h4>
                 <div class="cell-actions">
-                  <span class="task-badge running" v-if="isRunning(`video_${shot.idx}`)">生成中…</span>
+                  <span class="task-badge running" v-if="isRunning(`video_${shot.idx}`)">{{ taskMsg(`video_${shot.idx}`) }}</span>
                   <span class="task-badge done"    v-else-if="taskState(`video_${shot.idx}`)?.status==='done'">✓</span>
                   <button class="action-btn regen" :disabled="isRunning(`video_${shot.idx}`)"
                     @click="regenerateVideo(shot)" title="AI 重新生成视频（无首帧则文生视频）">↺ 重新生成视频</button>
                 </div>
               </div>
-              <video v-if="shot.has_video" class="shot-video" controls
-                :src="shotFileUrl(shot.idx,'video.mp4')" :key="imgTs[`shot_${shot.idx}_video.mp4`]"></video>
+              <div class="task-error-msg" v-if="taskError(`video_${shot.idx}`)">
+                <span>{{ taskError(`video_${shot.idx}`) }}</span>
+                <button @click="clearTaskError(`video_${shot.idx}`)">✕</button>
+              </div>
+              <div class="video-wrap" v-if="shot.has_video || isRunning(`video_${shot.idx}`)">
+                <video class="shot-video" controls
+                  :src="isRunning(`video_${shot.idx}`) && taskPreviewUrl(`video_${shot.idx}`)
+                    ? taskPreviewUrl(`video_${shot.idx}`)
+                    : shotFileUrl(shot.idx,'video.mp4')"
+                  :key="imgTs[`shot_${shot.idx}_video.mp4`]"></video>
+                <div class="generating-overlay" v-if="isRunning(`video_${shot.idx}`)">
+                  <span class="spinner"></span>
+                  <span class="generating-msg">{{ taskMsg(`video_${shot.idx}`) }}</span>
+                </div>
+              </div>
               <div class="frame-empty" v-else style="aspect-ratio:16/9;max-width:100%">
                 <span class="empty-icon">▶</span>
                 <span class="empty-text">视频尚未生成</span>
+              </div>
+              <!-- 版本历史 -->
+              <div class="version-strip version-strip-video" v-if="shotVersionList(shot,'video').length > 0">
+                <div class="version-item version-item-video" v-for="v in shotVersionList(shot,'video')" :key="v.id"
+                  :class="{selected: v.selected}" @click="selectShotVersion(shot,'video',v.id)" :title="v.created_at">
+                  <span class="version-video-icon">▶</span>
+                  <span class="version-time">{{ formatVersionTime(v.created_at) }}</span>
+                  <button class="version-del" @click.stop="deleteShotVersion(shot,'video',v.id)">✕</button>
+                </div>
               </div>
             </div>
 
@@ -210,7 +329,23 @@
                 <div class="portrait-overlay-btns">
                   <button @click.stop="openPortraitModal(char.identifier_in_scene, char.idx, view)">替换</button>
                   <button @click.stop="regeneratePortrait(char.identifier_in_scene, char.idx, view)"
-                    :disabled="isRunning(`portrait_${char.idx}_${view}`)">↺ 重生成</button>
+                    :disabled="isRunning(`portrait_${char.idx}_${view}`)">
+                    {{ isRunning(`portrait_${char.idx}_${view}`) ? taskMsg(`portrait_${char.idx}_${view}`) : '↺ 重生成' }}
+                  </button>
+                </div>
+                <div class="task-error-msg task-error-portrait" v-if="taskError(`portrait_${char.idx}_${view}`)">
+                  <span>{{ taskError(`portrait_${char.idx}_${view}`) }}</span>
+                  <button @click="clearTaskError(`portrait_${char.idx}_${view}`)">✕</button>
+                </div>
+              </div>
+              <!-- 版本历史 -->
+              <div class="version-strip version-strip-portrait" v-if="portraitVersionList(char.idx, view).length > 0">
+                <div class="version-item version-item-portrait" v-for="v in portraitVersionList(char.idx, view)" :key="v.id"
+                  :class="{selected: v.selected}"
+                  @click="selectPortraitVersion(char.idx, char.identifier_in_scene, view, v.id)"
+                  :title="v.created_at">
+                  <img :src="v.url" />
+                  <button class="version-del" @click.stop="deletePortraitVersion(char.idx, char.identifier_in_scene, view, v.id)">✕</button>
                 </div>
               </div>
             </div>

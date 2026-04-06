@@ -362,7 +362,8 @@ class Script2VideoPipeline:
                 for view, item in registry_item.items():
                     available_image_path_and_text_pairs.append((item["path"], item["description"]))
 
-            available_image_path_and_text_pairs.append(first_shot_ff_path_and_text_pair)
+            if first_shot_ff_path_and_text_pair is not None:
+                available_image_path_and_text_pairs.append(first_shot_ff_path_and_text_pair)
 
             selector_output_path = os.path.join(self.working_dir, "shots", f"{shot_idx}", f"{frame_type}_selector_output.json")
             if os.path.exists(selector_output_path):

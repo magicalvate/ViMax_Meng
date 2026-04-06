@@ -10,7 +10,9 @@ createApp({
 
     const characters = ref([]);
     const portraitsRegistry = ref({});
+    const portraitVersions = ref({});  // charIdx(str) -> {front:[...], side:[...], back:[...]}
     const shots = ref([]);
+    const cameraTree = ref([]);
     const hasFinalVideo = ref(false);
     const metadata = ref({});
 
@@ -32,9 +34,8 @@ createApp({
     const modal = ref(null);
 
     // task 状态: { key -> {taskId, status, error} }
-    // key 格式: "frame_{shotIdx}_{first|last}" | "video_{shotIdx}" | "portrait_{charIdx}_{view}"
     const taskStatus = reactive({});
-    const _pollers = {};  // key -> intervalId
+    const _pollers = {};
 
     // toast
     const toast = ref(null);
@@ -64,7 +65,9 @@ createApp({
         const data = await res.json();
         characters.value = data.characters || [];
         portraitsRegistry.value = data.portraits_registry || {};
+        portraitVersions.value = data.portrait_versions || {};
         shots.value = data.shots || [];
+        cameraTree.value = data.camera_tree || [];
         hasFinalVideo.value = data.has_final_video || false;
         metadata.value = data.metadata || {};
       } finally {
@@ -144,10 +147,16 @@ createApp({
       }
     }
 
-    // section row：col[0] 非空且 col[1..] 全为空（章节分隔行）
     function isSectionRow(row) {
       const cells = row.cells;
       return cells[0] && cells.slice(1).every(c => !c);
+    }
+
+    // ── 机位 ─────────────────────────────────────────────────────────────────
+    function shotCamera(shot) {
+      const cidx = shot.description?.cam_idx;
+      if (cidx == null) return null;
+      return cameraTree.value.find(c => c.idx === cidx) || null;
     }
 
     // ── 参考人物 ─────────────────────────────────────────────────────────────
@@ -195,20 +204,23 @@ createApp({
     // ── Task 轮询 ────────────────────────────────────────────────────────────
     function startPoll(key, taskId, onDone) {
       if (_pollers[key]) clearInterval(_pollers[key]);
-      taskStatus[key] = { taskId, status: "running" };
+      taskStatus[key] = { taskId, status: "running", status_msg: "启动中…", error_msg: null };
       _pollers[key] = setInterval(async () => {
         try {
           const r = await fetch(`/api/tasks/${taskId}`);
           const t = await r.json();
           taskStatus[key].status = t.status;
+          if (t.status_msg !== undefined) taskStatus[key].status_msg = t.status_msg;
+          if (t.preview_url) taskStatus[key].preview_url = t.preview_url;
           if (t.status === "done") {
             clearInterval(_pollers[key]);
             delete _pollers[key];
-            onDone();
+            onDone(t);
           } else if (t.status === "error") {
             clearInterval(_pollers[key]);
             delete _pollers[key];
-            showToast("生成失败: " + (t.error_msg || "未知错误"), "error");
+            taskStatus[key].error_msg = t.error_msg || "未知错误";
+            showToast("生成失败", "error");
           }
         } catch { /* ignore poll errors */ }
       }, 2000);
@@ -216,6 +228,117 @@ createApp({
 
     function taskState(key) { return taskStatus[key] || null; }
     function isRunning(key) { return taskStatus[key]?.status === "running"; }
+    function taskMsg(key) { return taskStatus[key]?.status_msg || "生成中…"; }
+    function taskError(key) { return taskStatus[key]?.error_msg || null; }
+    function taskPreviewUrl(key) { return taskStatus[key]?.preview_url || null; }
+    function clearTaskError(key) { if (taskStatus[key]) taskStatus[key].error_msg = null; }
+
+    // ── 版本工具 ─────────────────────────────────────────────────────────────
+    function formatVersionTime(isoStr) {
+      if (!isoStr) return "";
+      const d = new Date(isoStr);
+      const pad = n => String(n).padStart(2, "0");
+      return `${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function shotVersionList(shot, asset) {
+      return (shot.versions && shot.versions[asset]) || [];
+    }
+
+    function portraitVersionList(charIdx, view) {
+      return (portraitVersions.value[String(charIdx)] || {})[view] || [];
+    }
+
+    async function refreshShotVersions(shot) {
+      try {
+        const res = await fetch(`/api/projects/${enc(currentProject.value)}/shots/${shot.idx}/versions`);
+        if (res.ok) shot.versions = await res.json();
+      } catch {}
+    }
+
+    async function refreshPortraitVersions(charIdx) {
+      try {
+        const res = await fetch(`/api/projects/${enc(currentProject.value)}/characters/${charIdx}/portraits/versions`);
+        if (res.ok) {
+          portraitVersions.value = { ...portraitVersions.value, [String(charIdx)]: await res.json() };
+        }
+      } catch {}
+    }
+
+    async function selectShotVersion(shot, asset, vid) {
+      try {
+        const res = await fetch(
+          `/api/projects/${enc(currentProject.value)}/shots/${shot.idx}/versions/${asset}/${vid}/select`,
+          { method: "POST" }
+        );
+        if (!res.ok) throw new Error(await res.text());
+        await refreshShotVersions(shot);
+        // 刷新活动图/视频
+        const tsKey = asset === "video" ? `shot_${shot.idx}_video.mp4` : `shot_${shot.idx}_${asset}.png`;
+        imgTs.value[tsKey] = Date.now();
+        showToast("已切换版本", "success");
+      } catch (e) {
+        showToast("切换失败: " + e.message, "error");
+      }
+    }
+
+    async function deleteShotVersion(shot, asset, vid) {
+      try {
+        const res = await fetch(
+          `/api/projects/${enc(currentProject.value)}/shots/${shot.idx}/versions/${asset}/${vid}`,
+          { method: "DELETE" }
+        );
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        shot.versions = data.versions;
+        if (data.was_selected) {
+          const tsKey = asset === "video" ? `shot_${shot.idx}_video.mp4` : `shot_${shot.idx}_${asset}.png`;
+          imgTs.value[tsKey] = Date.now();
+          if (!shot.versions[asset] || shot.versions[asset].length === 0) {
+            if (asset === "video") shot.has_video = false;
+            else if (asset === "first_frame") shot.has_first_frame = false;
+            else if (asset === "last_frame") shot.has_last_frame = false;
+          }
+        }
+        showToast("版本已删除", "success");
+      } catch (e) {
+        showToast("删除失败: " + e.message, "error");
+      }
+    }
+
+    async function selectPortraitVersion(charIdx, charName, view, vid) {
+      try {
+        const res = await fetch(
+          `/api/projects/${enc(currentProject.value)}/characters/${charIdx}/portraits/${view}/versions/${vid}/select`,
+          { method: "POST" }
+        );
+        if (!res.ok) throw new Error(await res.text());
+        await refreshPortraitVersions(charIdx);
+        imgTs.value[`portrait_${charName}_${view}`] = Date.now();
+        showToast("已切换版本", "success");
+      } catch (e) {
+        showToast("切换失败: " + e.message, "error");
+      }
+    }
+
+    async function deletePortraitVersion(charIdx, charName, view, vid) {
+      try {
+        const res = await fetch(
+          `/api/projects/${enc(currentProject.value)}/characters/${charIdx}/portraits/${view}/versions/${vid}`,
+          { method: "DELETE" }
+        );
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        portraitVersions.value = {
+          ...portraitVersions.value,
+          [String(charIdx)]: { ...(portraitVersions.value[String(charIdx)] || {}), ...data.versions }
+        };
+        if (data.was_selected) imgTs.value[`portrait_${charName}_${view}`] = Date.now();
+        showToast("版本已删除", "success");
+      } catch (e) {
+        showToast("删除失败: " + e.message, "error");
+      }
+    }
 
     // ── AI 重新生成：帧 ──────────────────────────────────────────────────────
     async function regenerateFrame(shot, frameType) {
@@ -227,10 +350,13 @@ createApp({
         );
         if (!res.ok) throw new Error(await res.text());
         const { task_id } = await res.json();
-        startPoll(key, task_id, () => {
-          const tsKey = `shot_${shot.idx}_${frameType}_frame.png`;
+        startPoll(key, task_id, async (t) => {
+          const asset = `${frameType}_frame`;
+          const tsKey = `shot_${shot.idx}_${asset}.png`;
           imgTs.value[tsKey] = Date.now();
           shot[`has_${frameType}_frame`] = true;
+          shot[`${asset}_enabled`] = true;
+          await refreshShotVersions(shot);
           showToast(`Shot ${shot.idx} ${frameType === "first" ? "首帧" : "末帧"}已重新生成`, "success");
         });
       } catch (e) {
@@ -248,9 +374,10 @@ createApp({
         );
         if (!res.ok) throw new Error(await res.text());
         const { task_id } = await res.json();
-        startPoll(key, task_id, () => {
+        startPoll(key, task_id, async () => {
           imgTs.value[`shot_${shot.idx}_video.mp4`] = Date.now();
           shot.has_video = true;
+          await refreshShotVersions(shot);
           showToast(`Shot ${shot.idx} 视频已重新生成`, "success");
         });
       } catch (e) {
@@ -268,13 +395,87 @@ createApp({
         );
         if (!res.ok) throw new Error(await res.text());
         const { task_id } = await res.json();
-        startPoll(key, task_id, () => {
+        startPoll(key, task_id, async () => {
           imgTs.value[`portrait_${charName}_${view}`] = Date.now();
+          await refreshPortraitVersions(charIdx);
           showToast(`${charName} ${view} 肖像已重新生成`, "success");
         });
       } catch (e) {
         showToast("启动失败: " + e.message, "error");
       }
+    }
+
+    // ── 启用/禁用帧 ─────────────────────────────────────────────────────────
+    async function toggleFrameEnabled(shot, frameType) {
+      const ft_key = `${frameType}_frame`;
+      const newEnabled = !shot[`${ft_key}_enabled`];
+      try {
+        const res = await fetch(
+          `/api/projects/${enc(currentProject.value)}/shots/${shot.idx}/frames/${frameType}/enabled`,
+          { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: newEnabled }) }
+        );
+        if (!res.ok) throw new Error(await res.text());
+        shot[`${ft_key}_enabled`] = newEnabled;
+        showToast(`Shot ${shot.idx} ${frameType === "first" ? "首帧" : "末帧"}已${newEnabled ? "启用" : "禁用"}`, "success");
+      } catch (e) {
+        showToast("操作失败: " + e.message, "error");
+      }
+    }
+
+    // ── 视频生成模式标签 ─────────────────────────────────────────────────────
+    function videoModeLabel(shot) {
+      const hasFF = shot.has_first_frame && shot.first_frame_enabled;
+      const varType = shot.description?.variation_type;
+      const hasLF = shot.has_last_frame && shot.last_frame_enabled && (varType === "medium" || varType === "large");
+      if (hasFF && hasLF) return "首尾帧→视频";
+      if (hasFF) return "首帧→视频";
+      return "文生视频";
+    }
+
+    // ── 参考人物动态编辑 ─────────────────────────────────────────────────────
+    const charPickerShot = ref(null);  // 当前展开选择器的 shot.idx
+
+    function toggleCharPicker(shotIdx) {
+      charPickerShot.value = charPickerShot.value === shotIdx ? null : shotIdx;
+    }
+    function isCharPickerOpen(shotIdx) { return charPickerShot.value === shotIdx; }
+
+    function availableCharsToAdd(shot) {
+      const desc = shot.description;
+      if (!desc) return characters.value;
+      const current = new Set([...(desc.ff_vis_char_idxs || []), ...(desc.lf_vis_char_idxs || [])]);
+      return characters.value.filter(c => !current.has(c.idx));
+    }
+
+    async function _saveVisChars(shot, ffIdxs, lfIdxs) {
+      const res = await fetch(
+        `/api/projects/${enc(currentProject.value)}/shots/${shot.idx}/description`,
+        { method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ff_vis_char_idxs: ffIdxs, lf_vis_char_idxs: lfIdxs }) }
+      );
+      if (!res.ok) throw new Error(await res.text());
+      const updated = await res.json();
+      shot.description.ff_vis_char_idxs = updated.ff_vis_char_idxs;
+      shot.description.lf_vis_char_idxs = updated.lf_vis_char_idxs;
+    }
+
+    async function addVisChar(shot, charIdx) {
+      try {
+        const desc = shot.description;
+        const ff = [...new Set([...(desc.ff_vis_char_idxs || []), charIdx])];
+        const lf = [...new Set([...(desc.lf_vis_char_idxs || []), charIdx])];
+        await _saveVisChars(shot, ff, lf);
+        charPickerShot.value = null;
+      } catch (e) { showToast("添加失败: " + e.message, "error"); }
+    }
+
+    async function removeVisChar(shot, charIdx) {
+      try {
+        const desc = shot.description;
+        const ff = (desc.ff_vis_char_idxs || []).filter(i => i !== charIdx);
+        const lf = (desc.lf_vis_char_idxs || []).filter(i => i !== charIdx);
+        await _saveVisChars(shot, ff, lf);
+      } catch (e) { showToast("移除失败: " + e.message, "error"); }
     }
 
     // ── 手动替换 Modal ───────────────────────────────────────────────────────
@@ -393,7 +594,7 @@ createApp({
 
     return {
       projects, currentProject, activeTab, loading,
-      characters, portraitsRegistry, shots, hasFinalVideo, metadata,
+      characters, portraitsRegistry, portraitVersions, shots, cameraTree, hasFinalVideo, metadata,
       expandedShots, editingDesc, lightboxUrl, openLightbox,
       modal, toast, imgTs, taskStatus,
       scriptFiles, currentScriptFile, scriptData, scriptLoading, newScriptPath,
@@ -401,12 +602,21 @@ createApp({
       portraitUrl, shotFileUrl, finalVideoUrl, fileUrl,
       toggleShot, isShotExpanded,
       toggleDescEdit, isEditingDesc, saveDesc,
-      visibleCharPortraits,
+      visibleCharPortraits, shotCamera,
       regenerateFrame, regenerateVideo, regeneratePortrait,
-      taskState, isRunning,
+      toggleFrameEnabled, videoModeLabel,
+      taskState, isRunning, taskMsg, taskError, taskPreviewUrl, clearTaskError,
       openFrameModal, openPortraitModal,
       addSceneRef, deleteSceneRef,
       onFileSelected, triggerUploadInput, closeModal,
+      // 版本管理
+      shotVersionList, portraitVersionList,
+      selectShotVersion, deleteShotVersion,
+      selectPortraitVersion, deletePortraitVersion,
+      formatVersionTime,
+      // 参考人物编辑
+      charPickerShot, toggleCharPicker, isCharPickerOpen,
+      availableCharsToAdd, addVisChar, removeVisChar,
     };
   }
 }).mount("#app");
