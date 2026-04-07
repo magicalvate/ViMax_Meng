@@ -1,0 +1,60 @@
+    <!-- ══ ③ 分镜 Tab ══ -->
+    <div v-else-if="activeTab==='design_storyboard'">
+
+      <!-- Stage Card: ③ 分镜设计 -->
+      <div class="pipeline-stage-card" :class="{done: stagesStatus.design_storyboard?.done, running: isStageRunning('design_storyboard')}">
+        <div class="pipeline-stage-header" @click="toggleStageExpanded('design_storyboard')">
+          <span class="pipeline-stage-icon">
+            <span v-if="isStageRunning('design_storyboard')" class="spinner"></span>
+            <span v-else-if="stagesStatus.design_storyboard?.done" class="done-icon">&#10003;</span>
+            <span v-else class="stage-pending-icon">&#9675;</span>
+          </span>
+          <div class="pipeline-stage-info">
+            <span class="pipeline-stage-name">&#9314; 分镜设计</span>
+            <span class="pipeline-stage-detail">{{ stagesStatus.design_storyboard?.done ? stagesStatus.design_storyboard.count + ' 个镜头' : '未完成' }}</span>
+          </div>
+          <span class="chevron" :class="{open: stageExpanded.design_storyboard}">&#9662;</span>
+        </div>
+        <div class="pipeline-running-bar" v-if="isStageRunning('design_storyboard')">{{ stageTaskMsg('design_storyboard') }}</div>
+        <div class="pipeline-stage-error" v-if="stageTaskError('design_storyboard')">{{ stageTaskError('design_storyboard') }}</div>
+        <div class="pipeline-io" v-if="stageExpanded.design_storyboard">
+          <div class="pipeline-io-block">
+            <div class="pipeline-io-title">输入 · 脚本 & 用户需求</div>
+            <div v-for="sf in scriptFiles" :key="sf" class="pipeline-io-file"><span class="file-icon">&#128196;</span>{{ sf.split('/').pop() }}</div>
+            <div class="pipeline-io-row" style="margin-top:8px">
+              <span class="pipeline-io-label">user_requirement：</span>
+              <span class="pipeline-io-value">{{ userRequirement || '（未填写）' }}</span>
+            </div>
+            <textarea class="pipeline-meta-input" v-model="userRequirement" rows="2" placeholder="例如：Fast-paced, no more than 15 shots" style="margin-top:8px;width:100%"></textarea>
+            <button class="btn btn-ghost" style="margin-top:6px" @click="saveUserRequirement">保存需求</button>
+          </div>
+        </div>
+        <div class="pipeline-stage-actions">
+          <button class="btn btn-primary pipeline-run-btn" :disabled="isStageRunning('design_storyboard')" @click="runStage('design_storyboard', false)">
+            {{ isStageRunning('design_storyboard') ? '运行中…' : (stagesStatus.design_storyboard?.done ? '重新运行' : '运行') }}
+          </button>
+          <button class="btn btn-ghost pipeline-force-btn" :disabled="isStageRunning('design_storyboard')" @click="runStage('design_storyboard', true)">强制重跑</button>
+        </div>
+      </div>
+
+      <!-- 分镜列表 -->
+      <div v-if="storyboard.length === 0 && shots.length === 0" class="empty">暂无分镜数据</div>
+      <div class="shot-list">
+        <div v-for="shot in (storyboard.length > 0 ? storyboard : shots)" :key="shot.idx" class="shot-card">
+          <div class="shot-header" style="cursor:default">
+            <span class="shot-num">Shot {{ shot.idx }}</span>
+            <span v-if="shot.cam_idx != null || shot.description?.cam_idx != null" class="cam-badge">
+              机位 {{ shot.cam_idx ?? shot.description?.cam_idx }}
+            </span>
+            <span v-if="shot.variation_type || shot.description?.variation_type" class="variation-badge"
+              :class="shot.variation_type || shot.description?.variation_type">
+              {{ shot.variation_type || shot.description?.variation_type }}
+            </span>
+            <span class="shot-summary">{{ shot.visual_desc || shot.description?.visual_desc }}</span>
+          </div>
+          <div v-if="shot.audio_desc || shot.description?.audio_desc" style="padding:6px 16px 10px;font-size:12px;color:#64748b">
+            &#128266; {{ shot.audio_desc || shot.description?.audio_desc }}
+          </div>
+        </div>
+      </div>
+    </div>

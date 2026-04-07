@@ -4,8 +4,6 @@ import { setupShots } from './modules/shots.js';
 import { setupCharacters } from './modules/characters.js';
 import { setupScripts } from './modules/scripts.js';
 import { setupPipeline } from './modules/pipeline.js';
-import PipelineTab from './modules/components/pipeline-tab.js';
-
 const { createApp, ref, reactive, watch, provide } = Vue;
 
 createApp({
@@ -13,7 +11,7 @@ createApp({
     // ── 全局状态 ────────────────────────────────────────────────────────────
     const projects = ref([]);
     const currentProject = ref("");
-    const activeTab = ref("shots");
+    const activeTab = ref("extract_characters");
     const loading = ref(false);
 
     const characters = ref([]);
@@ -85,7 +83,7 @@ createApp({
 
     const scriptsModule = setupScripts({
       currentProject, scriptFiles, currentScriptFile, scriptData,
-      scriptLoading, newScriptPath, enc, showToast,
+      scriptLoading, newScriptPath, enc, showToast, characters,
     });
 
     // ── 加载项目 ─────────────────────────────────────────────────────────────
@@ -108,6 +106,7 @@ createApp({
         pipelineModule.storyboard.value = data.storyboard || [];
         pipelineModule.userRequirement.value = metadata.value.user_requirement || "";
         await scriptsModule.loadScriptFiles();
+        pipelineModule.fetchStagesStatus();
       } finally {
         loading.value = false;
       }
@@ -125,11 +124,11 @@ createApp({
 
     watch(currentProject, val => { if (val) loadProject(val); });
     watch(activeTab, val => {
-      if (val === 'pipeline') {
-        if (scriptFiles.value.length === 0) scriptsModule.loadScriptFiles();
+      if (val === 'extract_characters') {
         pipelineModule.loadAvailableApis();
         pipelineModule.loadApiConfig();
       }
+      pipelineModule.fetchStagesStatus();
     });
 
     // ── 辅助查询 ─────────────────────────────────────────────────────────────
@@ -177,5 +176,4 @@ createApp({
     provide('app', appState);
     return appState;
   },
-  components: { PipelineTab },
 }).mount("#app");

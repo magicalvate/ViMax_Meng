@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 from frontend.core import (
     WORKING_DIR, STATIC_DIR, SCENE_REF_EXTS,
@@ -14,10 +14,25 @@ from frontend.core import (
 
 router = APIRouter()
 
+_TAB_ORDER = [
+    "tab_extract_characters",
+    "tab_generate_portraits",
+    "tab_design_storyboard",
+    "tab_decompose_descriptions",
+    "tab_construct_camera_tree",
+    "tab_generate_frames",
+    "tab_generate_videos",
+    "tab_concatenate",
+]
+
 
 @router.get("/")
 async def index():
-    return FileResponse(str(STATIC_DIR / "index.html"))
+    tabs_dir = STATIC_DIR / "tabs"
+    tabs_html = "\n".join((tabs_dir / f"{name}.html").read_text() for name in _TAB_ORDER)
+    skeleton = (STATIC_DIR / "index.html").read_text()
+    html = skeleton.replace("<!-- TABS_PLACEHOLDER -->", tabs_html)
+    return HTMLResponse(html)
 
 
 @router.get("/api/projects")
@@ -123,6 +138,20 @@ async def update_metadata(project: str, request: Request):
     meta.update(body)
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     return meta
+
+
+@router.patch("/api/projects/{project}/characters/{idx}")
+async def update_character(project: str, idx: int, request: Request):
+    p = wd(project)
+    chars_path = p / "characters.json"
+    chars = json.loads(chars_path.read_text(encoding="utf-8")) if chars_path.exists() else []
+    body = await request.json()
+    for char in chars:
+        if char.get("idx") == idx:
+            char.update(body)
+            chars_path.write_text(json.dumps(chars, ensure_ascii=False, indent=2), encoding="utf-8")
+            return char
+    raise HTTPException(404, "Character not found")
 
 
 @router.get("/api/tasks/{task_id}")

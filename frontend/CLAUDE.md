@@ -1,17 +1,15 @@
 # Frontend 规范
 
-## 技术方向：Gradio 重构
+## 技术栈
 
-Vue.js 前端已废弃，新前端用 **Gradio** 重写，挂载进 FastAPI。
+Vue.js 3（CDN）+ 原生 HTML/CSS，挂载进 FastAPI。
 
-```python
-# server.py 挂载方式
-import gradio as gr
-from frontend.gradio_app.app import build_app
-gr.mount_gradio_app(app, build_app(), path="/")
+```bash
+uv run uvicorn frontend.server:app --reload
+# 访问 http://localhost:8000
 ```
 
-后端 `frontend/core.py` 和所有 routers 保持不变，handler 直接调 Python 函数，不走 HTTP。
+后端 `frontend/core.py` 和所有 routers 保持不变。
 
 ---
 
@@ -19,47 +17,36 @@ gr.mount_gradio_app(app, build_app(), path="/")
 
 ```
 frontend/
-  gradio_app/
-    app.py              # gr.Blocks 入口
-    state.py            # gr.State 定义
-    tabs/               # 每个 Tab 一个文件
-    components/         # 原子组件（stage_accordion, frame_cell 等）
-    handlers/           # 事件回调（调用 core.py）
-    utils/              # 工具函数（data_loaders, file_urls）
+  server.py              # FastAPI 服务入口
+  core.py                # 后端核心函数（勿改）
+  routers/               # REST API 路由层
+  static/                # 前端页面（Vue.js CDN）
+    index.html           # 骨架（顶栏 + Tab 导航 + Modal），约 80 行
+    modules/             # 按功能拆分的 JS 模块
+    tabs/                # 各 Tab 的 HTML 片段，服务端拼入骨架
+  gradio_app/            # [DEPRECATED] 旧 Gradio 界面，勿读勿改
 ```
 
 ---
 
-## 原子组件规范
+## 8 Tab 设计（对应 pipeline 8 个 stage）
 
-每个组件文件只暴露一个函数，返回 Gradio 组件列表：
+| Tab 名 | activeTab 值 | HTML 片段文件 | JS 模块 |
+|---|---|---|---|
+| 脚本 | `extract_characters` | `tabs/tab_extract_characters.html` | `scripts.js`, `pipeline.js` |
+| 人物 | `generate_portraits` | `tabs/tab_generate_portraits.html` | `characters.js`, `versions.js`, `pipeline.js` |
+| 分镜 | `design_storyboard` | `tabs/tab_design_storyboard.html` | `shots.js`, `pipeline.js` |
+| 描述 | `decompose_descriptions` | `tabs/tab_decompose_descriptions.html` | `shots.js`, `pipeline.js` |
+| 机位 | `construct_camera_tree` | `tabs/tab_construct_camera_tree.html` | `shots.js`, `pipeline.js` |
+| 帧 | `generate_frames` | `tabs/tab_generate_frames.html` | `shots.js`, `versions.js`, `pipeline.js` |
+| 视频 | `generate_videos` | `tabs/tab_generate_videos.html` | `shots.js`, `versions.js`, `pipeline.js` |
+| 最终视频 | `concatenate` | `tabs/tab_concatenate.html` | `pipeline.js` |
 
-```python
-# components/frame_cell.py
-def frame_cell(shot_idx: int, frame_type: str) -> tuple[gr.Image, gr.Button, gr.Button]:
-    img = gr.Image(label=f"{frame_type}", show_label=True)
-    regen_btn = gr.Button("↺ 重生成", size="sm")
-    toggle_btn = gr.Button("启用/禁用", size="sm")
-    return img, regen_btn, toggle_btn
-```
-
-组件 **不含任何业务逻辑**，逻辑全部在 `handlers/` 中。
-
----
-
-## 关键 Gradio 约束
-
-| 问题 | 解法 |
-|------|------|
-| N 个 Shot 不能动态渲染 | Dropdown 选 Shot → 单详情面板 |
-| 长任务轮询 | `gr.Timer(value=2, active=True)` 驱动状态刷新 |
-| 图片/视频文件服务 | 保留 FastAPI `/files/...` 路由，gr.Image 用 URL |
-| 文件上传 | `gr.UploadButton` → 调 handler → 调 FastAPI upload |
-| 版本历史 | `gr.Gallery` with labeled thumbnails |
+每个 Tab 顶部有该 stage 的运行控制栏（运行 / 强制重跑 / 状态展示）。
 
 ---
 
-## 功能设计（延续旧规范）
+## 功能设计原则
 
 - **最小粒度**：每个生成操作对应单一 shot + 单一 frame_type
 - **局部刷新**：生成完成后只更新对应组件，不全量刷新
@@ -73,9 +60,3 @@ def frame_cell(shot_idx: int, frame_type: str) -> tuple[gr.Image, gr.Button, gr.
 - 修改组件时只输出变更部分，禁止完整重写未变动文件
 - 优先复用已有 handler 函数，不重复实现
 - 搜索限定在 `frontend/` 目录
-
----
-
-## 模块参考
-
-完整原子模块清单见：`memory/frontend_gradio_architecture.md`

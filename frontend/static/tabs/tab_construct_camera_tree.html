@@ -1,0 +1,80 @@
+    <!-- ══ ⑤ 机位 Tab ══ -->
+    <div v-else-if="activeTab==='construct_camera_tree'">
+
+      <!-- Stage Card: ⑤ 构建相机树 -->
+      <div class="pipeline-stage-card" :class="{done: stagesStatus.construct_camera_tree?.done, running: isStageRunning('construct_camera_tree')}">
+        <div class="pipeline-stage-header" @click="toggleStageExpanded('construct_camera_tree')">
+          <span class="pipeline-stage-icon">
+            <span v-if="isStageRunning('construct_camera_tree')" class="spinner"></span>
+            <span v-else-if="stagesStatus.construct_camera_tree?.done" class="done-icon">&#10003;</span>
+            <span v-else class="stage-pending-icon">&#9675;</span>
+          </span>
+          <div class="pipeline-stage-info">
+            <span class="pipeline-stage-name">&#9316; 构建相机树</span>
+            <span class="pipeline-stage-detail">{{ stagesStatus.construct_camera_tree?.done ? cameraTree.length + ' 个机位' : '未完成' }}</span>
+          </div>
+          <span class="chevron" :class="{open: stageExpanded.construct_camera_tree}">&#9662;</span>
+        </div>
+        <div class="pipeline-running-bar" v-if="isStageRunning('construct_camera_tree')">{{ stageTaskMsg('construct_camera_tree') }}</div>
+        <div class="pipeline-stage-error" v-if="stageTaskError('construct_camera_tree')">{{ stageTaskError('construct_camera_tree') }}</div>
+        <div class="pipeline-io" v-if="stageExpanded.construct_camera_tree">
+          <div class="pipeline-io-block">
+            <div class="pipeline-io-title">输入 · 镜头视觉描述</div>
+            <div v-if="shots.filter(s=>s.description).length===0" class="pipeline-io-empty">视觉描述为空，请先运行④</div>
+            <div v-else class="pipeline-io-summary">{{ shots.filter(s=>s.description).length }} 个镜头描述</div>
+          </div>
+        </div>
+        <div class="pipeline-stage-actions">
+          <button class="btn btn-primary pipeline-run-btn" :disabled="isStageRunning('construct_camera_tree')" @click="runStage('construct_camera_tree', false)">
+            {{ isStageRunning('construct_camera_tree') ? '运行中…' : (stagesStatus.construct_camera_tree?.done ? '重新运行' : '运行') }}
+          </button>
+          <button class="btn btn-ghost pipeline-force-btn" :disabled="isStageRunning('construct_camera_tree')" @click="runStage('construct_camera_tree', true)">强制重跑</button>
+        </div>
+      </div>
+
+      <!-- 相机树 -->
+      <div v-if="cameraTree.length === 0" class="empty">暂无机位数据</div>
+      <div v-else style="margin-top:16px">
+        <div v-for="cam in cameraTree" :key="cam.idx" class="camera-io-row" style="margin-bottom:12px;padding:12px 16px;background:#1a1d27;border:1px solid #2d3148;border-radius:8px">
+          <div class="camera-io-header">
+            <span class="cam-badge" style="font-size:13px">机位 {{ cam.idx }}</span>
+            <span class="camera-io-shots" style="margin-left:12px;font-size:12px;color:#94a3b8">
+              镜头：{{ cam.active_shot_idxs.map(i=>'Shot '+i).join('、') }}
+            </span>
+          </div>
+          <div class="camera-io-parent" style="margin-top:6px;font-size:12px;color:#64748b" v-if="cam.parent_cam_idx != null">
+            父机位：机位 {{ cam.parent_cam_idx }}（依赖 Shot {{ cam.parent_shot_idx }}）
+            <span v-if="cam.is_parent_fully_covers_child === false" class="camera-missing">缺失：{{ cam.missing_info }}</span>
+          </div>
+          <div class="camera-io-parent" style="margin-top:6px;font-size:12px;color:#64748b" v-else>根机位（无父节点）</div>
+        </div>
+      </div>
+
+      <!-- 每个 shot 的机位信息 -->
+      <div v-if="shots.filter(s=>s.description?.cam_idx != null).length > 0" style="margin-top:24px">
+        <h4 style="font-size:13px;color:#94a3b8;margin-bottom:12px">镜头机位分配</h4>
+        <div class="shot-list">
+          <div class="shot-card" v-for="shot in shots.filter(s=>s.description?.cam_idx != null)" :key="shot.idx">
+            <div class="shot-header" style="cursor:default">
+              <span class="shot-num">Shot {{ shot.idx }}</span>
+              <span class="cam-badge">机位 {{ shot.description.cam_idx }}</span>
+              <span class="shot-summary">{{ shot.description.visual_desc }}</span>
+            </div>
+            <div class="cam-info-panel" style="padding:8px 16px 12px">
+              <span class="cam-info-label">机位 {{ shot.description.cam_idx }}</span>
+              <template v-if="shotCamera(shot)">
+                <span class="cam-info-item" title="该机位覆盖的所有镜头">
+                  覆盖镜头：{{ shotCamera(shot).active_shot_idxs.map(i => 'Shot ' + i).join('、') }}
+                </span>
+                <span class="cam-info-item" v-if="shotCamera(shot).parent_cam_idx != null">
+                  父机位：机位 {{ shotCamera(shot).parent_cam_idx }}
+                  <span v-if="shotCamera(shot).is_parent_fully_covers_child != null">
+                    （{{ shotCamera(shot).is_parent_fully_covers_child ? '完全覆盖' : '部分覆盖' }}）
+                  </span>
+                </span>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>

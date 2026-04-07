@@ -1,0 +1,42 @@
+    <!-- ══ ⑧ 最终视频 Tab ══ -->
+    <div v-else-if="activeTab==='concatenate'">
+
+      <!-- Stage Card: ⑧ 拼接最终视频 -->
+      <div class="pipeline-stage-card" :class="{done: stagesStatus.concatenate?.done, running: isStageRunning('concatenate')}">
+        <div class="pipeline-stage-header" @click="toggleStageExpanded('concatenate')">
+          <span class="pipeline-stage-icon">
+            <span v-if="isStageRunning('concatenate')" class="spinner"></span>
+            <span v-else-if="stagesStatus.concatenate?.done" class="done-icon">&#10003;</span>
+            <span v-else class="stage-pending-icon">&#9675;</span>
+          </span>
+          <div class="pipeline-stage-info">
+            <span class="pipeline-stage-name">&#9319; 拼接最终视频</span>
+            <span class="pipeline-stage-detail">{{ stagesStatus.concatenate?.done ? '已完成' : '未完成' }}</span>
+          </div>
+          <span class="chevron" :class="{open: stageExpanded.concatenate}">&#9662;</span>
+        </div>
+        <div class="pipeline-running-bar" v-if="isStageRunning('concatenate')">{{ stageTaskMsg('concatenate') }}</div>
+        <div class="pipeline-stage-error" v-if="stageTaskError('concatenate')">{{ stageTaskError('concatenate') }}</div>
+        <div class="pipeline-io" v-if="stageExpanded.concatenate">
+          <div class="pipeline-io-block">
+            <div class="pipeline-io-title">输入 · 镜头视频</div>
+            <div class="pipeline-io-summary">{{ shots.filter(s=>s.has_video).length }}/{{ shots.length }} 个视频已就绪</div>
+          </div>
+        </div>
+        <div class="pipeline-stage-actions">
+          <button class="btn btn-primary pipeline-run-btn" :disabled="isStageRunning('concatenate')" @click="runStage('concatenate', false)">
+            {{ isStageRunning('concatenate') ? '运行中…' : (stagesStatus.concatenate?.done ? '重新运行' : '运行') }}
+          </button>
+          <button class="btn btn-ghost pipeline-force-btn" :disabled="isStageRunning('concatenate')" @click="runStage('concatenate', true)">强制重跑</button>
+        </div>
+      </div>
+
+      <!-- 最终视频播放 -->
+      <div v-if="!hasFinalVideo" class="empty">最终视频尚未生成</div>
+      <div class="final-video-wrap" v-else>
+        <h3>最终视频</h3>
+        <video class="final-video" controls :src="finalVideoUrl()"></video>
+        <br />
+        <a class="download-btn" :href="finalVideoUrl()" download="final_video.mp4">下载视频</a>
+      </div>
+    </div>

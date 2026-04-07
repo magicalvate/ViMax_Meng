@@ -25,11 +25,9 @@ async def add_script(project: str, request: Request):
         raise HTTPException(400, f"File not found: {path}")
     meta_path = p / "metadata.json"
     meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
-    files = meta.setdefault("script_files", [])
-    if path not in files:
-        files.append(path)
+    meta["script_files"] = [path]
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {"ok": True, "script_files": files}
+    return {"ok": True, "script_files": meta["script_files"]}
 
 
 @router.post("/api/projects/{project}/scripts/upload")
@@ -44,11 +42,9 @@ async def upload_script(project: str, file: UploadFile = File(...)):
     script_path = str(dest)
     meta_path = p / "metadata.json"
     meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
-    files = meta.setdefault("script_files", [])
-    if script_path not in files:
-        files.append(script_path)
+    meta["script_files"] = [script_path]
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {"ok": True, "script_files": files, "path": script_path}
+    return {"ok": True, "script_files": meta["script_files"], "path": script_path}
 
 
 @router.delete("/api/projects/{project}/scripts")

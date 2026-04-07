@@ -1,0 +1,88 @@
+    <!-- ══ ⑦ 视频 Tab ══ -->
+    <div v-else-if="activeTab==='generate_videos'">
+
+      <!-- Stage Card: ⑦ 生成视频 -->
+      <div class="pipeline-stage-card" :class="{done: stagesStatus.generate_videos?.done, running: isStageRunning('generate_videos')}">
+        <div class="pipeline-stage-header" @click="toggleStageExpanded('generate_videos')">
+          <span class="pipeline-stage-icon">
+            <span v-if="isStageRunning('generate_videos')" class="spinner"></span>
+            <span v-else-if="stagesStatus.generate_videos?.done" class="done-icon">&#10003;</span>
+            <span v-else class="stage-pending-icon">&#9675;</span>
+          </span>
+          <div class="pipeline-stage-info">
+            <span class="pipeline-stage-name">&#9318; 生成视频</span>
+            <span class="pipeline-stage-detail">{{ stagesStatus.generate_videos?.shots_done }}/{{ stagesStatus.generate_videos?.shots_total }} 个镜头</span>
+          </div>
+          <span class="chevron" :class="{open: stageExpanded.generate_videos}">&#9662;</span>
+        </div>
+        <div class="pipeline-running-bar" v-if="isStageRunning('generate_videos')">{{ stageTaskMsg('generate_videos') }}</div>
+        <div class="pipeline-stage-error" v-if="stageTaskError('generate_videos')">{{ stageTaskError('generate_videos') }}</div>
+        <div class="pipeline-io" v-if="stageExpanded.generate_videos">
+          <div class="pipeline-io-block">
+            <div class="pipeline-io-title">输入 · 帧图 & 运动描述</div>
+            <div v-if="shots.filter(s=>s.has_first_frame).length===0" class="pipeline-io-empty">帧图为空，请先运行⑥</div>
+            <div v-else class="pipeline-io-summary">{{ shots.filter(s=>s.has_first_frame).length }} 个首帧已就绪</div>
+          </div>
+        </div>
+        <div class="pipeline-stage-actions">
+          <button class="btn btn-primary pipeline-run-btn" :disabled="isStageRunning('generate_videos')" @click="runStage('generate_videos', false)">
+            {{ isStageRunning('generate_videos') ? '运行中…' : (stagesStatus.generate_videos?.done ? '重新运行' : '运行') }}
+          </button>
+          <button class="btn btn-ghost pipeline-force-btn" :disabled="isStageRunning('generate_videos')" @click="runStage('generate_videos', true)">强制重跑</button>
+        </div>
+      </div>
+
+      <!-- Shot 视频列表 -->
+      <div v-if="shots.length === 0" class="empty">暂无镜头数据</div>
+      <div class="shot-list">
+        <div class="shot-card" v-for="shot in shots" :key="shot.idx">
+          <div class="shot-header" @click="toggleShot(shot.idx)">
+            <span class="shot-num">Shot {{ shot.idx }}</span>
+            <span v-if="shot.description?.cam_idx != null" class="cam-badge">机位 {{ shot.description.cam_idx }}</span>
+            <span v-if="shot.description" class="variation-badge" :class="shot.description.variation_type">{{ shot.description.variation_type }}</span>
+            <span class="shot-summary">{{ shot.description?.visual_desc }}</span>
+            <span class="chevron" :class="{open: isShotExpanded(shot.idx)}">▾</span>
+          </div>
+          <div v-if="isShotExpanded(shot.idx)" class="shot-body">
+            <div class="video-section">
+              <div class="cell-header">
+                <h4>镜头视频</h4>
+                <div class="cell-actions">
+                  <span class="task-badge running" v-if="isRunning(`video_${shot.idx}`)">{{ taskMsg(`video_${shot.idx}`) }}</span>
+                  <span class="task-badge done"    v-else-if="taskState(`video_${shot.idx}`)?.status==='done'">✓</span>
+                  <button class="action-btn regen" :disabled="isRunning(`video_${shot.idx}`)"
+                    @click="regenerateVideo(shot)">↺ 重新生成视频</button>
+                </div>
+              </div>
+              <div class="task-error-msg" v-if="taskError(`video_${shot.idx}`)">
+                <span>{{ taskError(`video_${shot.idx}`) }}</span>
+                <button @click="clearTaskError(`video_${shot.idx}`)">✕</button>
+              </div>
+              <div class="video-wrap" v-if="shot.has_video || isRunning(`video_${shot.idx}`)">
+                <video class="shot-video" controls
+                  :src="isRunning(`video_${shot.idx}`) && taskPreviewUrl(`video_${shot.idx}`)
+                    ? taskPreviewUrl(`video_${shot.idx}`)
+                    : shotFileUrl(shot.idx,'video.mp4')"
+                  :key="imgTs[`shot_${shot.idx}_video.mp4`]"></video>
+                <div class="generating-overlay" v-if="isRunning(`video_${shot.idx}`)">
+                  <span class="spinner"></span>
+                  <span class="generating-msg">{{ taskMsg(`video_${shot.idx}`) }}</span>
+                </div>
+              </div>
+              <div class="frame-empty" v-else style="aspect-ratio:16/9;max-width:100%">
+                <span class="empty-icon">▶</span>
+                <span class="empty-text">视频尚未生成</span>
+              </div>
+              <div class="version-strip version-strip-video" v-if="shotVersionList(shot,'video').length > 0">
+                <div class="version-item version-item-video" v-for="v in shotVersionList(shot,'video')" :key="v.id"
+                  :class="{selected: v.selected}" @click="selectShotVersion(shot,'video',v.id)" :title="v.created_at">
+                  <span class="version-video-icon">▶</span>
+                  <span class="version-time">{{ formatVersionTime(v.created_at) }}</span>
+                  <button class="version-del" @click.stop="deleteShotVersion(shot,'video',v.id)">✕</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>

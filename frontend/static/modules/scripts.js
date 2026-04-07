@@ -1,4 +1,7 @@
-export function setupScripts({ currentProject, scriptFiles, currentScriptFile, scriptData, scriptLoading, newScriptPath, enc, showToast }) {
+export function setupScripts({ currentProject, scriptFiles, currentScriptFile, scriptData, scriptLoading, newScriptPath, enc, showToast, characters }) {
+  const { ref } = Vue;
+  const editingCharIdx = ref(null);
+  const editingCharData = ref({});
   async function loadScriptFiles() {
     if (!currentProject.value) return;
     const res = await fetch(`/api/projects/${enc(currentProject.value)}/scripts`);
@@ -63,10 +66,46 @@ export function setupScripts({ currentProject, scriptFiles, currentScriptFile, s
     }
   }
 
+  function startEditChar(char) {
+    editingCharIdx.value = char.idx;
+    editingCharData.value = {
+      identifier_in_scene: char.identifier_in_scene,
+      static_features: char.static_features,
+      dynamic_features: char.dynamic_features,
+    };
+  }
+
+  function cancelEditChar() {
+    editingCharIdx.value = null;
+    editingCharData.value = {};
+  }
+
+  async function saveCharacter() {
+    const idx = editingCharIdx.value;
+    if (idx == null) return;
+    try {
+      const res = await fetch(`/api/projects/${enc(currentProject.value)}/characters/${idx}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editingCharData.value),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const updated = await res.json();
+      const i = characters.value.findIndex(c => c.idx === idx);
+      if (i !== -1) characters.value[i] = { ...characters.value[i], ...updated };
+      editingCharIdx.value = null;
+      editingCharData.value = {};
+      showToast("角色信息已保存", "success");
+    } catch (e) {
+      showToast("保存失败: " + e.message, "error");
+    }
+  }
+
   function isSectionRow(row) {
     const cells = row.cells;
     return cells[0] && cells.slice(1).every(c => !c);
   }
 
-  return { loadScriptFiles, loadScript, addScript, uploadScript, isSectionRow };
+  return { loadScriptFiles, loadScript, addScript, uploadScript, isSectionRow,
+           editingCharIdx, editingCharData, startEditChar, cancelEditChar, saveCharacter };
 }

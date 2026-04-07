@@ -1,0 +1,82 @@
+    <!-- ══ ② 人物 Tab ══ -->
+    <div v-else-if="activeTab==='generate_portraits'">
+
+      <!-- Stage Card: ② 生成角色肖像 -->
+      <div class="pipeline-stage-card" :class="{done: stagesStatus.generate_portraits?.done, running: isStageRunning('generate_portraits')}">
+        <div class="pipeline-stage-header" @click="toggleStageExpanded('generate_portraits')">
+          <span class="pipeline-stage-icon">
+            <span v-if="isStageRunning('generate_portraits')" class="spinner"></span>
+            <span v-else-if="stagesStatus.generate_portraits?.done" class="done-icon">&#10003;</span>
+            <span v-else class="stage-pending-icon">&#9675;</span>
+          </span>
+          <div class="pipeline-stage-info">
+            <span class="pipeline-stage-name">&#9313; 生成角色肖像</span>
+            <span class="pipeline-stage-detail">{{ stagesStatus.generate_portraits?.done ? stagesStatus.generate_portraits.count + ' 张肖像' : '未完成' }}</span>
+          </div>
+          <span class="chevron" :class="{open: stageExpanded.generate_portraits}">&#9662;</span>
+        </div>
+        <div class="pipeline-running-bar" v-if="isStageRunning('generate_portraits')">{{ stageTaskMsg('generate_portraits') }}</div>
+        <div class="pipeline-stage-error" v-if="stageTaskError('generate_portraits')">{{ stageTaskError('generate_portraits') }}</div>
+        <div class="pipeline-io" v-if="stageExpanded.generate_portraits">
+          <div class="pipeline-io-block">
+            <div class="pipeline-io-title">输入 · 角色 & 风格</div>
+            <div v-if="characters.length === 0" class="pipeline-io-empty">角色列表为空，请先运行①</div>
+            <div v-for="char in characters" :key="char.idx" class="pipeline-io-tag">{{ char.identifier_in_scene }}</div>
+            <div class="pipeline-io-row" style="margin-top:8px">
+              <span class="pipeline-io-label">风格 (style)：</span>
+              <input class="pipeline-meta-input" v-model="metadata.style" placeholder="输入画面风格…" style="width:100%" />
+              <button class="btn btn-ghost" style="margin-top:4px" @click="saveMetadataField('style', metadata.style)">保存风格</button>
+            </div>
+          </div>
+        </div>
+        <div class="pipeline-stage-actions">
+          <button class="btn btn-primary pipeline-run-btn" :disabled="isStageRunning('generate_portraits')" @click="runStage('generate_portraits', false)">
+            {{ isStageRunning('generate_portraits') ? '运行中…' : (stagesStatus.generate_portraits?.done ? '重新运行' : '运行') }}
+          </button>
+          <button class="btn btn-ghost pipeline-force-btn" :disabled="isStageRunning('generate_portraits')" @click="runStage('generate_portraits', true)">强制重跑</button>
+        </div>
+      </div>
+
+      <!-- 角色肖像卡片 -->
+      <div v-if="characters.length === 0" class="empty">暂无角色数据</div>
+      <div class="char-grid">
+        <div class="char-card" v-for="char in characters" :key="char.idx">
+          <p class="char-name">{{ char.identifier_in_scene }}</p>
+          <p class="char-feature">{{ char.static_features }}</p>
+          <p class="char-feature">{{ char.dynamic_features }}</p>
+          <div class="portrait-row">
+            <div class="portrait-item" v-for="view in ['front','side','back']" :key="view">
+              <span class="portrait-label">{{ view }}</span>
+              <div class="portrait-img-wrap">
+                <div class="portrait-task-overlay" v-if="isRunning(`portrait_${char.idx}_${view}`)">
+                  <span class="spinner"></span>
+                </div>
+                <img class="portrait-img" :src="portraitUrl(char.identifier_in_scene, view)" :alt="view"
+                  @click="openLightbox(portraitUrl(char.identifier_in_scene, view))"
+                  @error="$event.target.style.opacity='0.15'" />
+                <div class="portrait-overlay-btns">
+                  <button @click.stop="openPortraitModal(char.identifier_in_scene, char.idx, view)">替换</button>
+                  <button @click.stop="regeneratePortrait(char.identifier_in_scene, char.idx, view)"
+                    :disabled="isRunning(`portrait_${char.idx}_${view}`)">
+                    {{ isRunning(`portrait_${char.idx}_${view}`) ? taskMsg(`portrait_${char.idx}_${view}`) : '↺ 重生成' }}
+                  </button>
+                </div>
+                <div class="task-error-msg task-error-portrait" v-if="taskError(`portrait_${char.idx}_${view}`)">
+                  <span>{{ taskError(`portrait_${char.idx}_${view}`) }}</span>
+                  <button @click="clearTaskError(`portrait_${char.idx}_${view}`)">✕</button>
+                </div>
+              </div>
+              <div class="version-strip version-strip-portrait" v-if="portraitVersionList(char.idx, view).length > 0">
+                <div class="version-item version-item-portrait" v-for="v in portraitVersionList(char.idx, view)" :key="v.id"
+                  :class="{selected: v.selected}"
+                  @click="selectPortraitVersion(char.idx, char.identifier_in_scene, view, v.id)"
+                  :title="v.created_at">
+                  <img :src="v.url" />
+                  <button class="version-del" @click.stop="deletePortraitVersion(char.idx, char.identifier_in_scene, view, v.id)">✕</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>

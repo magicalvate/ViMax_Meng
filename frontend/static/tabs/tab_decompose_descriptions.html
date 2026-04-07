@@ -1,0 +1,76 @@
+    <!-- ══ ④ 描述 Tab ══ -->
+    <div v-else-if="activeTab==='decompose_descriptions'">
+
+      <!-- Stage Card: ④ 视觉描述拆解 -->
+      <div class="pipeline-stage-card" :class="{done: stagesStatus.decompose_descriptions?.done, running: isStageRunning('decompose_descriptions')}">
+        <div class="pipeline-stage-header" @click="toggleStageExpanded('decompose_descriptions')">
+          <span class="pipeline-stage-icon">
+            <span v-if="isStageRunning('decompose_descriptions')" class="spinner"></span>
+            <span v-else-if="stagesStatus.decompose_descriptions?.done" class="done-icon">&#10003;</span>
+            <span v-else class="stage-pending-icon">&#9675;</span>
+          </span>
+          <div class="pipeline-stage-info">
+            <span class="pipeline-stage-name">&#9315; 视觉描述拆解</span>
+            <span class="pipeline-stage-detail">{{ stagesStatus.decompose_descriptions?.shots_done }}/{{ stagesStatus.decompose_descriptions?.shots_total }} 个镜头</span>
+          </div>
+          <span class="chevron" :class="{open: stageExpanded.decompose_descriptions}">&#9662;</span>
+        </div>
+        <div class="pipeline-running-bar" v-if="isStageRunning('decompose_descriptions')">{{ stageTaskMsg('decompose_descriptions') }}</div>
+        <div class="pipeline-stage-error" v-if="stageTaskError('decompose_descriptions')">{{ stageTaskError('decompose_descriptions') }}</div>
+        <div class="pipeline-io" v-if="stageExpanded.decompose_descriptions">
+          <div class="pipeline-io-block">
+            <div class="pipeline-io-title">输入 · 分镜（storyboard）</div>
+            <div v-if="storyboard.length === 0" class="pipeline-io-empty">分镜为空，请先运行③</div>
+            <div v-else class="pipeline-io-summary">{{ storyboard.length }} 个分镜 × {{ characters.length }} 个角色</div>
+          </div>
+        </div>
+        <div class="pipeline-stage-actions">
+          <button class="btn btn-primary pipeline-run-btn" :disabled="isStageRunning('decompose_descriptions')" @click="runStage('decompose_descriptions', false)">
+            {{ isStageRunning('decompose_descriptions') ? '运行中…' : (stagesStatus.decompose_descriptions?.done ? '重新运行' : '运行') }}
+          </button>
+          <button class="btn btn-ghost pipeline-force-btn" :disabled="isStageRunning('decompose_descriptions')" @click="runStage('decompose_descriptions', true)">强制重跑</button>
+        </div>
+      </div>
+
+      <!-- 描述编辑面板 -->
+      <div v-if="shots.length === 0" class="empty">暂无镜头描述数据</div>
+      <div class="shot-list">
+        <div class="shot-card" v-for="shot in shots" :key="shot.idx">
+          <div class="shot-header" style="cursor:default">
+            <span class="shot-num">Shot {{ shot.idx }}</span>
+            <span v-if="shot.description?.cam_idx != null" class="cam-badge">机位 {{ shot.description.cam_idx }}</span>
+            <span v-if="shot.description" class="variation-badge" :class="shot.description.variation_type">{{ shot.description.variation_type }}</span>
+            <span class="shot-summary">{{ shot.description?.visual_desc }}</span>
+          </div>
+          <div class="shot-body" v-if="shot.description">
+            <div class="desc-panel">
+              <div class="desc-panel-header" @click="toggleDescEdit(shot.idx)">
+                <span class="section-label" style="margin:0">描述文字</span>
+                <span class="desc-edit-toggle">{{ isEditingDesc(shot.idx) ? '收起' : '编辑' }}</span>
+              </div>
+              <div v-if="isEditingDesc(shot.idx)" class="desc-fields">
+                <label class="desc-label">首帧描述 (ff_desc)</label>
+                <textarea class="desc-textarea" v-model="shot.description.ff_desc" rows="3"></textarea>
+                <label class="desc-label">末帧描述 (lf_desc)</label>
+                <textarea class="desc-textarea" v-model="shot.description.lf_desc" rows="3"></textarea>
+                <label class="desc-label">镜头运动 (motion_desc)</label>
+                <textarea class="desc-textarea" v-model="shot.description.motion_desc" rows="2"></textarea>
+                <label class="desc-label">音频描述 (audio_desc)</label>
+                <textarea class="desc-textarea" v-model="shot.description.audio_desc" rows="2"></textarea>
+                <div class="desc-actions">
+                  <button class="btn btn-primary" @click="saveDesc(shot)">保存描述</button>
+                  <button class="btn btn-ghost" @click="toggleDescEdit(shot.idx)">取消</button>
+                </div>
+              </div>
+              <div v-else class="decomp-io-fields" style="padding:8px 0">
+                <div class="decomp-io-field"><span class="decomp-io-label">首帧</span><span>{{ shot.description.ff_desc }}</span></div>
+                <div class="decomp-io-field" v-if="shot.description.variation_type !== 'small'"><span class="decomp-io-label">末帧</span><span>{{ shot.description.lf_desc }}</span></div>
+                <div class="decomp-io-field"><span class="decomp-io-label">运动</span><span>{{ shot.description.motion_desc }}</span></div>
+                <div class="decomp-io-field" v-if="shot.description.audio_desc"><span class="decomp-io-label">音频</span><span>{{ shot.description.audio_desc }}</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="shot-body" v-else style="padding:8px 16px;color:#64748b;font-size:12px">尚未生成描述</div>
+        </div>
+      </div>
+    </div>

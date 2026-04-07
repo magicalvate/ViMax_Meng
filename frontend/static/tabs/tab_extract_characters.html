@@ -1,0 +1,134 @@
+    <!-- ══ ① 脚本 Tab ══ -->
+    <div v-else-if="activeTab==='extract_characters'">
+
+      <!-- API 配置面板 -->
+      <div class="api-config-panel" style="margin-bottom:20px;border:1px solid #2d3148;border-radius:8px;padding:16px;background:#1a1d27">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <h3 style="margin:0;font-size:14px;flex:1">⚙️ API 配置</h3>
+          <button class="btn btn-primary" style="padding:4px 12px;font-size:12px" @click="loadAvailableApis(); loadApiConfig()">刷新</button>
+          <button class="btn btn-ghost" style="padding:4px 12px;font-size:12px" @click="toggleApiPanel">{{ showApiPanel ? '收起' : '展开' }}</button>
+        </div>
+        <div v-if="showApiPanel" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+          <div style="border:1px solid #252840;border-radius:6px;padding:12px;background:#252840">
+            <label style="display:block;font-size:12px;color:#64748b;margin-bottom:8px;font-weight:600">图片生成器</label>
+            <select v-model="apiConfigModel.image_generator.class_path" style="width:100%;padding:6px;background:#1a1d27;border:1px solid #3d4266;border-radius:4px;color:#e2e8f0;font-size:12px">
+              <option value="">默认</option>
+              <option v-for="api in availableApis.image_generator" :key="api.class_path + api.model" :value="api.class_path">{{ api.name }}</option>
+            </select>
+          </div>
+          <div style="border:1px solid #252840;border-radius:6px;padding:12px;background:#252840">
+            <label style="display:block;font-size:12px;color:#64748b;margin-bottom:8px;font-weight:600">视频生成器</label>
+            <select v-model="apiConfigModel.video_generator.class_path" style="width:100%;padding:6px;background:#1a1d27;border:1px solid #3d4266;border-radius:4px;color:#e2e8f0;font-size:12px">
+              <option value="">默认</option>
+              <option v-for="api in availableApis.video_generator" :key="api.class_path + api.t2v_model" :value="api.class_path">{{ api.name }}</option>
+            </select>
+          </div>
+          <div style="border:1px solid #252840;border-radius:6px;padding:12px;background:#252840">
+            <label style="display:block;font-size:12px;color:#64748b;margin-bottom:8px;font-weight:600">聊天模型</label>
+            <select v-model="apiConfigModel.chat_model.model" style="width:100%;padding:6px;background:#1a1d27;border:1px solid #3d4266;border-radius:4px;color:#e2e8f0;font-size:12px">
+              <option value="">默认</option>
+              <option v-for="api in availableApis.chat_model" :key="api.model + api.base_url" :value="api.model">{{ api.name }}</option>
+            </select>
+          </div>
+        </div>
+        <div v-if="showApiPanel" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn btn-ghost" @click="loadApiConfig">取消</button>
+          <button class="btn btn-primary" @click="saveApiConfig">保存配置</button>
+        </div>
+      </div>
+
+      <!-- Stage Card: ① 提取角色 -->
+      <div class="pipeline-stage-card" :class="{done: stagesStatus.extract_characters?.done, running: isStageRunning('extract_characters')}">
+        <div class="pipeline-stage-header" @click="toggleStageExpanded('extract_characters')">
+          <span class="pipeline-stage-icon">
+            <span v-if="isStageRunning('extract_characters')" class="spinner"></span>
+            <span v-else-if="stagesStatus.extract_characters?.done" class="done-icon">&#10003;</span>
+            <span v-else class="stage-pending-icon">&#9675;</span>
+          </span>
+          <div class="pipeline-stage-info">
+            <span class="pipeline-stage-name">&#9312; 提取角色</span>
+            <span class="pipeline-stage-detail">{{ stagesStatus.extract_characters?.done ? stagesStatus.extract_characters.count + ' 个角色' : '未完成' }}</span>
+          </div>
+          <span class="chevron" :class="{open: stageExpanded.extract_characters}">&#9662;</span>
+        </div>
+        <div class="pipeline-running-bar" v-if="isStageRunning('extract_characters')">{{ stageTaskMsg('extract_characters') }}</div>
+        <div class="pipeline-stage-error" v-if="stageTaskError('extract_characters')">{{ stageTaskError('extract_characters') }}</div>
+        <div class="pipeline-io" v-if="stageExpanded.extract_characters">
+          <div class="pipeline-io-block">
+            <div class="pipeline-io-title">输入 · 脚本文件</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+              <span v-if="scriptFiles.length > 0" style="font-size:13px;color:#a78bfa;flex:1">{{ scriptFiles[0].split('/').pop() }}</span>
+              <span v-else style="font-size:13px;color:#64748b;flex:1">尚未添加脚本</span>
+              <label class="btn btn-primary" style="cursor:pointer;padding:4px 12px;font-size:12px">
+                {{ scriptFiles.length > 0 ? '替换文件' : '选择脚本文件' }}
+                <input type="file" accept=".txt,.md,.docx" @change="uploadScript($event)" style="display:none" />
+              </label>
+            </div>
+            <div v-if="scriptLoading" class="loading" style="padding:8px 0">解析中...</div>
+            <div v-else-if="scriptData && scriptData.type==='text'" class="script-text-wrap" style="max-height:300px;overflow:auto">
+              <h4 class="script-title" style="margin:0 0 6px">{{ scriptData.filename }}</h4>
+              <pre class="script-text" style="font-size:12px">{{ scriptData.content }}</pre>
+            </div>
+            <div v-else-if="scriptData && scriptData.type==='docx'" class="script-docx-wrap" style="max-height:300px;overflow:auto">
+              <h4 class="script-title" style="margin:0 0 6px">{{ scriptData.title || scriptData.filename }}</h4>
+              <div class="script-table-wrap" v-for="(tbl, ti) in scriptData.tables" :key="ti">
+                <table class="script-table">
+                  <thead>
+                    <tr v-if="tbl[0] && tbl[0].is_header">
+                      <th v-for="(cell, ci) in tbl[0].cells" :key="ci">{{ cell }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, ri) in tbl.slice(1)" :key="ri" :class="{'section-row': isSectionRow(row)}">
+                      <td v-for="(cell, ci) in row.cells" :key="ci">{{ cell }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="pipeline-io-block">
+            <div class="pipeline-io-title">输出 · 角色列表</div>
+            <div v-if="characters.length === 0" class="pipeline-io-empty">尚未生成</div>
+            <div v-for="char in characters" :key="char.idx" class="char-io-row" style="flex-direction:column;align-items:stretch;gap:6px">
+              <!-- 查看模式 -->
+              <template v-if="editingCharIdx !== char.idx">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span class="char-io-name" style="flex:1">{{ char.identifier_in_scene }}</span>
+                  <button class="btn btn-ghost" style="padding:2px 10px;font-size:12px" @click.stop="startEditChar(char)">编辑</button>
+                </div>
+                <span class="char-io-feat">外貌：{{ char.static_features }}</span>
+                <span class="char-io-feat">服饰：{{ char.dynamic_features }}</span>
+              </template>
+              <!-- 编辑模式 -->
+              <template v-else>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <label style="font-size:12px;color:#94a3b8;width:40px;flex-shrink:0">名称</label>
+                    <input v-model="editingCharData.identifier_in_scene" style="flex:1;padding:4px 8px;background:#1a1d27;border:1px solid #3d4266;border-radius:4px;color:#e2e8f0;font-size:12px" />
+                  </div>
+                  <div style="display:flex;align-items:flex-start;gap:8px">
+                    <label style="font-size:12px;color:#94a3b8;width:40px;flex-shrink:0;padding-top:4px">外貌</label>
+                    <textarea v-model="editingCharData.static_features" rows="3" style="flex:1;padding:4px 8px;background:#1a1d27;border:1px solid #3d4266;border-radius:4px;color:#e2e8f0;font-size:12px;resize:vertical"></textarea>
+                  </div>
+                  <div style="display:flex;align-items:flex-start;gap:8px">
+                    <label style="font-size:12px;color:#94a3b8;width:40px;flex-shrink:0;padding-top:4px">服饰</label>
+                    <textarea v-model="editingCharData.dynamic_features" rows="3" style="flex:1;padding:4px 8px;background:#1a1d27;border:1px solid #3d4266;border-radius:4px;color:#e2e8f0;font-size:12px;resize:vertical"></textarea>
+                  </div>
+                  <div style="display:flex;gap:8px;justify-content:flex-end">
+                    <button class="btn btn-ghost" style="padding:3px 12px;font-size:12px" @click.stop="cancelEditChar">取消</button>
+                    <button class="btn btn-primary" style="padding:3px 12px;font-size:12px" @click.stop="saveCharacter">保存</button>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+        <div class="pipeline-stage-actions">
+          <button class="btn btn-primary pipeline-run-btn" :disabled="isStageRunning('extract_characters')" @click="runStage('extract_characters', false)">
+            {{ isStageRunning('extract_characters') ? '运行中…' : (stagesStatus.extract_characters?.done ? '重新运行' : '运行') }}
+          </button>
+          <button class="btn btn-ghost pipeline-force-btn" :disabled="isStageRunning('extract_characters')" @click="runStage('extract_characters', true)">强制重跑</button>
+        </div>
+      </div>
+    </div>
