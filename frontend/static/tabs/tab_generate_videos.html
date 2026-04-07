@@ -44,43 +44,62 @@
             <span class="chevron" :class="{open: isShotExpanded(shot.idx)}">▾</span>
           </div>
           <div v-if="isShotExpanded(shot.idx)" class="shot-body">
-            <div class="video-section">
-              <div class="cell-header">
-                <h4>镜头视频</h4>
-                <div class="cell-actions">
-                  <span class="task-badge running" v-if="isRunning(`video_${shot.idx}`)">{{ taskMsg(`video_${shot.idx}`) }}</span>
-                  <span class="task-badge done"    v-else-if="taskState(`video_${shot.idx}`)?.status==='done'">✓</span>
-                  <button class="action-btn regen" :disabled="isRunning(`video_${shot.idx}`)"
-                    @click="regenerateVideo(shot)">↺ 重新生成视频</button>
+            <div class="video-section video-section-row">
+
+              <!-- 参考帧 -->
+              <div class="video-ref-frames">
+                <div class="video-ref-frame-item">
+                  <span class="video-ref-label">首帧</span>
+                  <img v-if="shot.has_first_frame" :src="shotFileUrl(shot.idx,'first_frame.png')" @click="openLightbox(shotFileUrl(shot.idx,'first_frame.png'))" />
+                  <div v-else class="video-ref-placeholder">—</div>
+                </div>
+                <div class="video-ref-frame-item">
+                  <span class="video-ref-label">末帧</span>
+                  <img v-if="shot.has_last_frame" :src="shotFileUrl(shot.idx,'last_frame.png')" @click="openLightbox(shotFileUrl(shot.idx,'last_frame.png'))" />
+                  <div v-else class="video-ref-placeholder">—</div>
                 </div>
               </div>
-              <div class="task-error-msg" v-if="taskError(`video_${shot.idx}`)">
-                <span>{{ taskError(`video_${shot.idx}`) }}</span>
-                <button @click="clearTaskError(`video_${shot.idx}`)">✕</button>
-              </div>
-              <div class="video-wrap" v-if="shot.has_video || isRunning(`video_${shot.idx}`)">
-                <video class="shot-video" controls
-                  :src="isRunning(`video_${shot.idx}`) && taskPreviewUrl(`video_${shot.idx}`)
-                    ? taskPreviewUrl(`video_${shot.idx}`)
-                    : shotFileUrl(shot.idx,'video.mp4')"
-                  :key="imgTs[`shot_${shot.idx}_video.mp4`]"></video>
-                <div class="generating-overlay" v-if="isRunning(`video_${shot.idx}`)">
-                  <span class="spinner"></span>
-                  <span class="generating-msg">{{ taskMsg(`video_${shot.idx}`) }}</span>
+
+              <!-- 视频 -->
+              <div class="video-main">
+                <div class="cell-header">
+                  <h4>镜头视频</h4>
+                  <div class="cell-actions">
+                    <span class="task-badge running" v-if="isRunning(`video_${shot.idx}`)">{{ taskMsg(`video_${shot.idx}`) }}</span>
+                    <span class="task-badge done"    v-else-if="taskState(`video_${shot.idx}`)?.status==='done'">✓</span>
+                    <button class="action-btn regen" :disabled="isRunning(`video_${shot.idx}`)"
+                      @click="regenerateVideo(shot)">↺ 重新生成视频</button>
+                  </div>
+                </div>
+                <div class="task-error-msg" v-if="taskError(`video_${shot.idx}`)">
+                  <span>{{ taskError(`video_${shot.idx}`) }}</span>
+                  <button @click="clearTaskError(`video_${shot.idx}`)">✕</button>
+                </div>
+                <div class="video-wrap" v-if="shot.has_video || isRunning(`video_${shot.idx}`)">
+                  <video class="shot-video" controls
+                    :src="isRunning(`video_${shot.idx}`) && taskPreviewUrl(`video_${shot.idx}`)
+                      ? taskPreviewUrl(`video_${shot.idx}`)
+                      : shotFileUrl(shot.idx,'video.mp4')"
+                    :key="imgTs[`shot_${shot.idx}_video.mp4`]"></video>
+                  <div class="generating-overlay" v-if="isRunning(`video_${shot.idx}`)">
+                    <span class="spinner"></span>
+                    <span class="generating-msg">{{ taskMsg(`video_${shot.idx}`) }}</span>
+                  </div>
+                </div>
+                <div class="frame-empty" v-else style="aspect-ratio:16/9">
+                  <span class="empty-icon">▶</span>
+                  <span class="empty-text">视频尚未生成</span>
+                </div>
+                <div class="version-strip version-strip-video" v-if="shotVersionList(shot,'video').length > 0">
+                  <div class="version-item version-item-video" v-for="v in shotVersionList(shot,'video')" :key="v.id"
+                    :class="{selected: v.selected}" @click="selectShotVersion(shot,'video',v.id)" :title="v.created_at">
+                    <span class="version-video-icon">▶</span>
+                    <span class="version-time">{{ formatVersionTime(v.created_at) }}</span>
+                    <button class="version-del" @click.stop="deleteShotVersion(shot,'video',v.id)">✕</button>
+                  </div>
                 </div>
               </div>
-              <div class="frame-empty" v-else style="aspect-ratio:16/9;max-width:100%">
-                <span class="empty-icon">▶</span>
-                <span class="empty-text">视频尚未生成</span>
-              </div>
-              <div class="version-strip version-strip-video" v-if="shotVersionList(shot,'video').length > 0">
-                <div class="version-item version-item-video" v-for="v in shotVersionList(shot,'video')" :key="v.id"
-                  :class="{selected: v.selected}" @click="selectShotVersion(shot,'video',v.id)" :title="v.created_at">
-                  <span class="version-video-icon">▶</span>
-                  <span class="version-time">{{ formatVersionTime(v.created_at) }}</span>
-                  <button class="version-del" @click.stop="deleteShotVersion(shot,'video',v.id)">✕</button>
-                </div>
-              </div>
+
             </div>
           </div>
         </div>

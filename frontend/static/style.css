@@ -103,6 +103,15 @@ body { margin: 0; font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-s
 .frame-img-wrap { position: relative; flex: 1; }
 .video-wrap { position: relative; }
 
+/* ── 视频 Tab 行布局 ── */
+.video-section-row { display: flex; gap: 16px; align-items: flex-start; }
+.video-ref-frames { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; width: 120px; }
+.video-ref-frame-item { display: flex; flex-direction: column; gap: 4px; }
+.video-ref-frame-item img { width: 120px; border-radius: 6px; border: 1px solid #2d3148; cursor: zoom-in; object-fit: cover; }
+.video-ref-label { font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.video-ref-placeholder { width: 120px; aspect-ratio: 16/9; border-radius: 6px; border: 1px dashed #2d3148; background: #0f1117; display: flex; align-items: center; justify-content: center; color: #334155; font-size: 14px; }
+.video-main { flex: 1; min-width: 0; max-width: 480px; }
+
 /* 生成中遮罩（覆盖在旧图/视频上） */
 .generating-overlay {
   position: absolute; inset: 0; border-radius: 8px;
