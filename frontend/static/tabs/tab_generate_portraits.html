@@ -35,13 +35,28 @@
           </button>
           <button class="btn btn-ghost pipeline-force-btn" :disabled="isStageRunning('generate_portraits')" @click="runStage('generate_portraits', true)">强制重跑</button>
         </div>
+        <div class="model-override-bar" v-if="availableApis.image_generator.length > 1">
+          <span class="model-override-label">单次重生成模型：</span>
+          <select class="model-override-select" v-model="charImageModelOverride">
+            <option value="">默认</option>
+            <option v-for="api in availableApis.image_generator" :key="api.class_path + api.model" :value="api.class_path">{{ api.name }}</option>
+          </select>
+        </div>
       </div>
 
       <!-- 角色肖像卡片 -->
       <div v-if="characters.length === 0" class="empty">暂无角色数据</div>
       <div class="char-grid">
         <div class="char-card" v-for="char in characters" :key="char.idx">
-          <p class="char-name">{{ char.identifier_in_scene }}</p>
+          <div class="char-card-header">
+            <p class="char-name">{{ char.identifier_in_scene }}</p>
+            <button class="action-btn regen char-regen-all-btn"
+              :disabled="isRunning(`portrait_all_${char.idx}`)"
+              @click="regenerateCharacterAll(char.identifier_in_scene, char.idx)">
+              <span v-if="isRunning(`portrait_all_${char.idx}`)">{{ taskMsg(`portrait_all_${char.idx}`) }}</span>
+              <span v-else>↺ 全部重生成</span>
+            </button>
+          </div>
           <p class="char-feature">{{ char.static_features }}</p>
           <p class="char-feature">{{ char.dynamic_features }}</p>
           <div class="portrait-row">
@@ -66,17 +81,52 @@
                   <button @click="clearTaskError(`portrait_${char.idx}_${view}`)">✕</button>
                 </div>
               </div>
-              <div class="version-strip version-strip-portrait" v-if="portraitVersionList(char.idx, view).length > 0">
-                <div class="version-item version-item-portrait" v-for="v in portraitVersionList(char.idx, view)" :key="v.id"
-                  :class="{selected: v.selected}"
-                  @click="selectPortraitVersion(char.idx, char.identifier_in_scene, view, v.id)"
-                  :title="v.created_at">
-                  <img :src="v.url" />
-                  <button class="version-del" @click.stop="deletePortraitVersion(char.idx, char.identifier_in_scene, view, v.id)">✕</button>
+            </div><!-- /portrait-item (v-for) -->
+          </div><!-- /portrait-row -->
+          <!-- 参考图 -->
+          <div class="portrait-refs-section">
+            <div class="portrait-refs-header">
+              <span class="portrait-refs-title">参考图</span>
+              <label :for="`portrait-ref-input-${char.idx}`" class="action-btn portrait-ref-add-btn">＋ 添加</label>
+              <input :id="`portrait-ref-input-${char.idx}`" type="file" accept="image/*" style="display:none"
+                @change="addPortraitRef(char.idx, $event)" />
+            </div>
+            <div class="portrait-refs-list" v-if="charPortraitRefs(char.idx).length > 0">
+              <div class="portrait-ref-item" v-for="ref in charPortraitRefs(char.idx)" :key="ref.filename"
+                :class="{disabled: !ref.enabled}">
+                <img :src="ref.url" @click.stop="openLightbox(ref.url)"
+                  @error="$event.target.style.opacity='0.15'" />
+                <div class="portrait-ref-actions">
+                  <button :title="ref.enabled ? '点击禁用' : '点击启用'"
+                    @click.stop="togglePortraitRef(char.idx, ref)">{{ ref.enabled ? '✓' : '✗' }}</button>
+                  <button class="danger" @click.stop="deletePortraitRef(char.idx, ref)">✕</button>
                 </div>
               </div>
             </div>
+            <div v-else class="portrait-refs-empty">暂无参考图，点击"＋ 添加"上传</div>
           </div>
+
+          <!-- 版本快照 -->
+          <div class="portrait-bundle-section">
+            <div class="portrait-bundle-header">
+              <span class="portrait-refs-title">版本快照</span>
+              <button class="action-btn" @click="savePortraitBundle(char.idx)">保存快照</button>
+            </div>
+            <div class="portrait-bundle-list" v-if="charBundleVersions(char.idx).length > 0">
+              <div class="portrait-bundle-item" v-for="v in charBundleVersions(char.idx)" :key="v.id"
+                :class="{selected: v.selected}"
+                @click="selectPortraitBundle(char.idx, char.identifier_in_scene, v.id)"
+                :title="v.created_at">
+                <img :src="v.preview_url + (bundlePreviewTs[`${char.idx}_${v.id}`] ? '?t=' + bundlePreviewTs[`${char.idx}_${v.id}`] : '')"
+                  @error="$event.target.style.opacity='0.2'" />
+                <span class="version-time">{{ formatVersionTime(v.created_at) }}</span>
+                <button class="bundle-update-btn" title="用当前肖像覆盖此快照"
+                  @click.stop="updatePortraitBundle(char.idx, char.identifier_in_scene, v.id)">↺</button>
+                <button class="version-del" @click.stop="deletePortraitBundle(char.idx, char.identifier_in_scene, v.id)">✕</button>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>

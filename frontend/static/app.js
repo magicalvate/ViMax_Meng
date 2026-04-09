@@ -17,6 +17,8 @@ createApp({
     const characters = ref([]);
     const portraitsRegistry = ref({});
     const portraitVersions = ref({});
+    const portraitRefs = ref({});
+    const portraitBundleVersions = ref({});
     const shots = ref([]);
     const cameraTree = ref([]);
     const hasFinalVideo = ref(false);
@@ -25,6 +27,7 @@ createApp({
     const taskStatus = reactive({});
     const imgTs = ref({});
     const lightboxUrl = ref(null);
+    const availableApis = ref({ image_generator: [], video_generator: [], chat_model: [] });
 
     const scriptFiles = ref([]);
     const currentScriptFile = ref("");
@@ -72,13 +75,13 @@ createApp({
     const shotsModule = setupShots({
       currentProject, shots, characters, portraitsRegistry, imgTs,
       enc, shotFileUrl, portraitUrl: () => {}, showToast,
-      startPoll, refreshShotVersions,
+      startPoll, refreshShotVersions, availableApis,
     });
     const { modal } = shotsModule;
 
     const charsModule = setupCharacters({
-      currentProject, portraitsRegistry, imgTs, modal,
-      enc, showToast, startPoll, refreshPortraitVersions,
+      currentProject, portraitsRegistry, portraitRefs, portraitBundleVersions, imgTs, modal,
+      enc, showToast, startPoll, refreshPortraitVersions, availableApis,
     });
 
     const scriptsModule = setupScripts({
@@ -99,6 +102,8 @@ createApp({
         characters.value = data.characters || [];
         portraitsRegistry.value = data.portraits_registry || {};
         portraitVersions.value = data.portrait_versions || {};
+        portraitRefs.value = data.portrait_refs || {};
+        portraitBundleVersions.value = data.portrait_bundle_versions || {};
         shots.value = data.shots || [];
         cameraTree.value = data.camera_tree || [];
         hasFinalVideo.value = data.has_final_video || false;
@@ -113,19 +118,22 @@ createApp({
     }
 
     const pipelineModule = setupPipeline({
-      currentProject, shots, cameraTree, metadata, enc, showToast, loadProject,
+      currentProject, shots, cameraTree, metadata, enc, showToast, loadProject, availableApis,
     });
 
     async function init() {
-      const res = await fetch("/api/projects");
-      projects.value = await res.json();
+      const [projRes, apisRes] = await Promise.all([
+        fetch("/api/projects"),
+        fetch("/api/api-options"),
+      ]);
+      projects.value = await projRes.json();
+      if (apisRes.ok) Object.assign(availableApis.value, await apisRes.json());
       if (projects.value.length > 0) currentProject.value = projects.value[0];
     }
 
     watch(currentProject, val => { if (val) loadProject(val); });
     watch(activeTab, val => {
       if (val === 'extract_characters') {
-        pipelineModule.loadAvailableApis();
         pipelineModule.loadApiConfig();
       }
       pipelineModule.fetchStagesStatus();
@@ -153,7 +161,7 @@ createApp({
     const appState = {
       // 状态
       projects, currentProject, activeTab, loading,
-      characters, portraitsRegistry, portraitVersions, shots, cameraTree, hasFinalVideo, metadata,
+      characters, portraitsRegistry, portraitVersions, portraitRefs, portraitBundleVersions, shots, cameraTree, hasFinalVideo, metadata,
       imgTs, lightboxUrl, openLightbox, toast, taskStatus,
       scriptFiles, currentScriptFile, scriptData, scriptLoading, newScriptPath,
       // URL 工具

@@ -30,6 +30,13 @@
           </button>
           <button class="btn btn-ghost pipeline-force-btn" :disabled="isStageRunning('generate_videos')" @click="runStage('generate_videos', true)">强制重跑</button>
         </div>
+        <div class="model-override-bar" v-if="availableApis.video_generator.length > 1">
+          <span class="model-override-label">单次重生成模型：</span>
+          <select class="model-override-select" v-model="videoModelOverride">
+            <option value="">默认</option>
+            <option v-for="api in availableApis.video_generator" :key="api.class_path + api.t2v_model" :value="api.class_path">{{ api.name }}</option>
+          </select>
+        </div>
       </div>
 
       <!-- Shot 视频列表 -->
@@ -50,14 +57,29 @@
               <div class="video-ref-frames">
                 <div class="video-ref-frame-item">
                   <span class="video-ref-label">首帧</span>
-                  <img v-if="shot.has_first_frame" :src="shotFileUrl(shot.idx,'first_frame.png')" @click="openLightbox(shotFileUrl(shot.idx,'first_frame.png'))" />
+                  <div v-if="shot.has_first_frame" class="frame-img-wrap" style="width:100%">
+                    <img :class="{'frame-disabled': !shot.first_frame_enabled}"
+                      :src="shotFileUrl(shot.idx,'first_frame.png')"
+                      @click="openLightbox(shotFileUrl(shot.idx,'first_frame.png'))" />
+                    <div class="frame-disabled-overlay" v-if="!shot.first_frame_enabled">
+                      <span class="disabled-label">已禁用</span>
+                    </div>
+                  </div>
                   <div v-else class="video-ref-placeholder">—</div>
                 </div>
                 <div class="video-ref-frame-item">
                   <span class="video-ref-label">末帧</span>
-                  <img v-if="shot.has_last_frame" :src="shotFileUrl(shot.idx,'last_frame.png')" @click="openLightbox(shotFileUrl(shot.idx,'last_frame.png'))" />
+                  <div v-if="shot.has_last_frame" class="frame-img-wrap" style="width:100%">
+                    <img :class="{'frame-disabled': !shot.last_frame_enabled}"
+                      :src="shotFileUrl(shot.idx,'last_frame.png')"
+                      @click="openLightbox(shotFileUrl(shot.idx,'last_frame.png'))" />
+                    <div class="frame-disabled-overlay" v-if="!shot.last_frame_enabled">
+                      <span class="disabled-label">已禁用</span>
+                    </div>
+                  </div>
                   <div v-else class="video-ref-placeholder">—</div>
                 </div>
+                <div class="video-ref-mode-badge">{{ videoModeLabel(shot) }}</div>
               </div>
 
               <!-- 视频 -->

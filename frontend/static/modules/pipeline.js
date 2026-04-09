@@ -1,6 +1,6 @@
 const { reactive, ref } = Vue;
 
-export function setupPipeline({ currentProject, shots, cameraTree, metadata, enc, showToast, loadProject }) {
+export function setupPipeline({ currentProject, shots, cameraTree, metadata, enc, showToast, loadProject, availableApis }) {
   const pipelineStages = [
     { key: "extract_characters",    label: "① 提取角色" },
     { key: "generate_portraits",    label: "② 生成角色肖像" },
@@ -131,11 +131,6 @@ export function setupPipeline({ currentProject, shots, cameraTree, metadata, enc
 
   // ── API 配置 ──────────────────────────────────────────────────────────────
   const showApiPanel = ref(false);
-  const availableApis = ref({
-    image_generator: [],
-    video_generator: [],
-    chat_model: [],
-  });
   const apiConfig = reactive({
     image_generator: {},
     video_generator: {},

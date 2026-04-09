@@ -110,6 +110,7 @@ body { margin: 0; font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-s
 .video-ref-frame-item img { width: 120px; border-radius: 6px; border: 1px solid #2d3148; cursor: zoom-in; object-fit: cover; }
 .video-ref-label { font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
 .video-ref-placeholder { width: 120px; aspect-ratio: 16/9; border-radius: 6px; border: 1px dashed #2d3148; background: #0f1117; display: flex; align-items: center; justify-content: center; color: #334155; font-size: 14px; }
+.video-ref-mode-badge { margin-top: 4px; font-size: 10px; font-weight: 600; color: #7c83d0; background: #1a1e36; border: 1px solid #2d3148; border-radius: 4px; padding: 2px 6px; text-align: center; white-space: nowrap; }
 .video-main { flex: 1; min-width: 0; max-width: 480px; }
 
 /* 生成中遮罩（覆盖在旧图/视频上） */
@@ -195,7 +196,15 @@ body { margin: 0; font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-s
 /* ── 人物 Tab（全局肖像管理） ── */
 .char-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
 .char-card { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; padding: 20px; }
-.char-name { font-size: 16px; font-weight: 700; color: #c4b5fd; margin: 0 0 4px; }
+.char-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.char-name { font-size: 16px; font-weight: 700; color: #c4b5fd; margin: 0; }
+.char-regen-all-btn { font-size: 11px; padding: 3px 10px; white-space: nowrap; }
+
+/* ── 模型覆盖栏 ── */
+.model-override-bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #1a1d27; border-top: 1px solid #2d3148; }
+.model-override-label { font-size: 12px; color: #64748b; white-space: nowrap; }
+.model-override-select { background: #252840; color: #e2e8f0; border: 1px solid #3d4266; border-radius: 6px; padding: 4px 8px; font-size: 12px; outline: none; cursor: pointer; flex: 1; max-width: 320px; }
+.model-override-select:focus { border-color: #7c3aed; }
 .char-feature { font-size: 12px; color: #64748b; line-height: 1.5; margin: 0 0 14px; }
 .portrait-row { display: flex; gap: 12px; }
 .portrait-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
@@ -350,6 +359,37 @@ body { margin: 0; font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-s
 .version-item-portrait img { width: 40px; height: 60px; }
 .version-item-portrait { width: 40px; }
 .version-item-portrait .version-time { display: none; }
+
+/* 肖像参考图 */
+.portrait-refs-section { margin-top: 14px; border-top: 1px solid #1e2133; padding-top: 10px; }
+.portrait-bundle-section { margin-top: 10px; border-top: 1px solid #1e2133; padding-top: 10px; }
+.portrait-refs-header, .portrait-bundle-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.portrait-refs-title { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; flex: 1; }
+.portrait-ref-add-btn { font-size: 11px; padding: 2px 8px; }
+.portrait-refs-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.portrait-ref-item { position: relative; width: 64px; }
+.portrait-ref-item img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; border: 2px solid #2d3148; cursor: zoom-in; display: block; transition: border-color .15s; }
+.portrait-ref-item.disabled img { opacity: 0.35; }
+.portrait-ref-item:hover img { border-color: #7c3aed; }
+.portrait-ref-actions { position: absolute; bottom: 0; left: 0; right: 0; display: flex; gap: 2px; padding: 3px; opacity: 0; transition: opacity .15s; background: linear-gradient(transparent, rgba(10,12,20,.85)); border-radius: 0 0 6px 6px; }
+.portrait-ref-item:hover .portrait-ref-actions { opacity: 1; }
+.portrait-ref-actions button { flex: 1; background: rgba(30,33,55,.9); border: 1px solid #3d4266; color: #94a3b8; border-radius: 4px; padding: 2px 0; font-size: 10px; cursor: pointer; }
+.portrait-ref-actions button.danger { color: #f87171; }
+.portrait-ref-actions button:hover { background: rgba(124,58,237,.85); color: #fff; border-color: #7c3aed; }
+.portrait-refs-empty { font-size: 12px; color: #3d4266; font-style: italic; }
+
+/* 版本快照（bundle） */
+.portrait-bundle-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.portrait-bundle-item { position: relative; width: 56px; cursor: pointer; border-radius: 6px; border: 2px solid #2d3148; overflow: visible; transition: border-color .15s; }
+.portrait-bundle-item img { width: 56px; height: 84px; object-fit: cover; border-radius: 4px; display: block; }
+.portrait-bundle-item.selected { border-color: #7c3aed; }
+.portrait-bundle-item:hover { border-color: #a78bfa; }
+.portrait-bundle-item .version-time { display: block; font-size: 9px; color: #475569; text-align: center; padding: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.portrait-bundle-item .version-del { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; border-radius: 50%; background: #1e2133; border: 1px solid #3d4266; color: #94a3b8; font-size: 9px; cursor: pointer; display: none; align-items: center; justify-content: center; padding: 0; }
+.portrait-bundle-item:hover .version-del { display: flex; }
+.bundle-update-btn { position: absolute; top: -6px; left: -6px; width: 16px; height: 16px; border-radius: 50%; background: #1e2133; border: 1px solid #3d4266; color: #7c83d0; font-size: 10px; cursor: pointer; display: none; align-items: center; justify-content: center; padding: 0; }
+.portrait-bundle-item:hover .bundle-update-btn { display: flex; }
+.bundle-update-btn:hover { background: #2d3148; color: #a78bfa; border-color: #7c3aed; }
 
 /* ── 空/加载状态 ── */
 .empty   { color: #475569; text-align: center; padding: 60px 0; font-size: 15px; }

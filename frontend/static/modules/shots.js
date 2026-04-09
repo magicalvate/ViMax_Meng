@@ -3,9 +3,11 @@ const { ref } = Vue;
 export function setupShots({
   currentProject, shots, characters, portraitsRegistry, imgTs,
   enc, shotFileUrl, portraitUrl, showToast,
-  startPoll, refreshShotVersions,
+  startPoll, refreshShotVersions, availableApis,
 }) {
   const expandedShots = ref(new Set());
+  const frameImageModelOverride = ref("");
+  const videoModelOverride = ref("");
   const editingDesc = ref(new Set());
   const frameRefsExpanded = ref({});
   const charPickerShot = ref(null);
@@ -85,12 +87,24 @@ export function setupShots({
   }
 
   // ── AI 重新生成 ──────────────────────────────────────────────────────────────
+  function _frameModelOverrideBody() {
+    const api = availableApis?.value?.image_generator?.find(a => a.class_path === frameImageModelOverride.value);
+    if (!api) return {};
+    return { model_override: { image_generator: { class_path: api.class_path, init_args: { model: api.model } } } };
+  }
+
+  function _videoModelOverrideBody() {
+    const api = availableApis?.value?.video_generator?.find(a => a.class_path === videoModelOverride.value);
+    if (!api) return {};
+    return { model_override: { video_generator: { class_path: api.class_path, init_args: { t2v_model: api.t2v_model } } } };
+  }
+
   async function regenerateFrame(shot, frameType) {
     const key = `frame_${shot.idx}_${frameType}`;
     try {
       const res = await fetch(
         `/api/projects/${enc(currentProject.value)}/shots/${shot.idx}/regenerate/frame/${frameType}`,
-        { method: "POST" }
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(_frameModelOverrideBody()) }
       );
       if (!res.ok) throw new Error(await res.text());
       const { task_id } = await res.json();
@@ -113,7 +127,7 @@ export function setupShots({
     try {
       const res = await fetch(
         `/api/projects/${enc(currentProject.value)}/shots/${shot.idx}/regenerate/video`,
-        { method: "POST" }
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(_videoModelOverrideBody()) }
       );
       if (!res.ok) throw new Error(await res.text());
       const { task_id } = await res.json();
@@ -275,6 +289,7 @@ export function setupShots({
 
   return {
     expandedShots, editingDesc, frameRefsExpanded, charPickerShot, modal,
+    frameImageModelOverride, videoModelOverride,
     toggleShot, isShotExpanded,
     toggleDescEdit, isEditingDesc, saveDesc,
     frameRefsList, toggleFrameRefs, isFrameRefsExpanded, toggleFrameRef, refreshFrameRefs,

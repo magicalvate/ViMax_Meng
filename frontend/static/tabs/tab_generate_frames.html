@@ -30,6 +30,13 @@
           </button>
           <button class="btn btn-ghost pipeline-force-btn" :disabled="isStageRunning('generate_frames')" @click="runStage('generate_frames', true)">强制重跑</button>
         </div>
+        <div class="model-override-bar" v-if="availableApis.image_generator.length > 1">
+          <span class="model-override-label">单次重生成模型：</span>
+          <select class="model-override-select" v-model="frameImageModelOverride">
+            <option value="">默认</option>
+            <option v-for="api in availableApis.image_generator" :key="api.class_path + api.model" :value="api.class_path">{{ api.name }}</option>
+          </select>
+        </div>
       </div>
 
       <!-- Shot 帧网格 -->

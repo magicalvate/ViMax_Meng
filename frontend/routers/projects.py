@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from frontend.core import (
     WORKING_DIR, STATIC_DIR, SCENE_REF_EXTS,
     wd, load_frame_refs, is_frame_enabled, shot_version_urls,
-    load_portrait_versions, _tasks,
+    load_portrait_versions, load_portrait_refs, load_portrait_bundle_versions, _tasks,
 )
 
 router = APIRouter()
@@ -91,6 +91,8 @@ async def get_project_data(project: str):
             })
 
     portrait_versions: Dict[str, Dict] = {}
+    portrait_refs: Dict[str, List] = {}
+    portrait_bundle_versions: Dict[str, List] = {}
     portraits_dir = p / "character_portraits"
     if portraits_dir.exists():
         for char_dict in characters:
@@ -106,11 +108,19 @@ async def get_project_data(project: str):
                         for e in entries
                     ]
                 portrait_versions[str(cidx)] = pv_with_urls
+                portrait_refs[str(cidx)] = load_portrait_refs(char_dir, project)
+                bundle_entries = load_portrait_bundle_versions(char_dir)
+                portrait_bundle_versions[str(cidx)] = [
+                    {**e, "preview_url": f"/files/{project}/character_portraits/{cidx}_{cname}/versions/bundle_{e['id']}_front.png"}
+                    for e in bundle_entries
+                ]
 
     return {
         "characters": characters,
         "portraits_registry": portraits_registry,
         "portrait_versions": portrait_versions,
+        "portrait_refs": portrait_refs,
+        "portrait_bundle_versions": portrait_bundle_versions,
         "storyboard": storyboard,
         "camera_tree": camera_tree,
         "shots": shots,

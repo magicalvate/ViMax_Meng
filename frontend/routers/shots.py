@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, UploadFile
 
 from frontend.core import (
-    wd, save_upload, get_pipeline, SCENE_REF_EXTS,
+    wd, save_upload, get_pipeline, get_pipeline_for_task, SCENE_REF_EXTS,
     load_frame_refs, load_ref_overrides, save_ref_overrides,
     is_frame_enabled, set_frame_enabled, frame_state_path,
     load_shot_versions, save_shot_versions, shot_version_urls,
@@ -218,13 +218,18 @@ async def delete_shot_version(project: str, shot_idx: int, asset: str, vid: str)
 # ── AI 重新生成：帧 ──────────────────────────────────────────────────────────
 
 @router.post("/api/projects/{project}/shots/{shot_idx}/regenerate/frame/{frame_type}")
-async def regenerate_frame(project: str, shot_idx: int, frame_type: str):
+async def regenerate_frame(project: str, shot_idx: int, frame_type: str, request: Request):
     if frame_type not in ("first", "last"):
         raise HTTPException(400, "frame_type must be first/last")
     p = wd(project)
     if not (p / "shots" / str(shot_idx) / "shot_description.json").exists():
         raise HTTPException(404, "shot_description.json not found")
-    pipeline = get_pipeline(project)
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    pipeline = get_pipeline_for_task(project, body.get("model_override") or None)
     tid = new_task()
     asyncio.create_task(_run_regenerate_frame(tid, pipeline, p, shot_idx, frame_type))
     return {"task_id": tid}
@@ -309,11 +314,16 @@ async def _run_regenerate_frame(tid: str, pipeline, p: Path, shot_idx: int, fram
 # ── AI 重新生成：视频 ────────────────────────────────────────────────────────
 
 @router.post("/api/projects/{project}/shots/{shot_idx}/regenerate/video")
-async def regenerate_video(project: str, shot_idx: int):
+async def regenerate_video(project: str, shot_idx: int, request: Request):
     p = wd(project)
     if not (p / "shots" / str(shot_idx) / "shot_description.json").exists():
         raise HTTPException(404, "shot_description.json not found")
-    pipeline = get_pipeline(project)
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    pipeline = get_pipeline_for_task(project, body.get("model_override") or None)
     tid = new_task()
     asyncio.create_task(_run_regenerate_video(tid, pipeline, p, shot_idx))
     return {"task_id": tid}
