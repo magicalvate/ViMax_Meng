@@ -170,14 +170,25 @@ export function setupPipeline({ currentProject, shots, cameraTree, metadata, enc
   async function saveApiConfig() {
     if (!currentProject.value) return;
     try {
+      // 切换 class 时，从 availableApis 里查出对应的 init_args（含 api_key）并合并进去
+      const payload = JSON.parse(JSON.stringify(apiConfigModel));
+      for (const key of ["image_generator", "video_generator"]) {
+        const selectedClass = payload[key]?.class_path;
+        if (selectedClass) {
+          const option = availableApis.value[key]?.find(a => a.class_path === selectedClass);
+          if (option?.init_args) {
+            payload[key].init_args = { ...option.init_args, ...payload[key].init_args };
+          }
+        }
+      }
       const res = await fetch(`/api/projects/${enc(currentProject.value)}/api-config`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(apiConfigModel),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         showToast("API 配置已保存（管道将重新加载）", "success");
-        Object.assign(apiConfig, apiConfigModel);
+        Object.assign(apiConfig, payload);
       } else {
         showToast("保存失败", "error");
       }

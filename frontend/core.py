@@ -88,17 +88,19 @@ def get_available_apis() -> Dict[str, List[Dict]]:
             if "image_generator" in config:
                 cfg = config["image_generator"]
                 cp = cfg.get("class_path", "")
-                model = cfg.get("init_args", {}).get("model", "")
+                init_args = cfg.get("init_args", {})
+                model = init_args.get("model", "")
                 if (cp, model) not in seen:
-                    apis["image_generator"].append({"name": f"{cp.split('.')[-1]} - {model or cfg_name}", "class_path": cp, "model": model, "config_file": cfg_name})
+                    apis["image_generator"].append({"name": f"{cp.split('.')[-1]} - {model or cfg_name}", "class_path": cp, "model": model, "init_args": init_args, "config_file": cfg_name})
                     seen.add((cp, model))
 
             if "video_generator" in config:
                 cfg = config["video_generator"]
                 cp = cfg.get("class_path", "")
-                t2v = cfg.get("init_args", {}).get("t2v_model", "")
+                init_args = cfg.get("init_args", {})
+                t2v = init_args.get("t2v_model", "")
                 if (cp, t2v) not in seen:
-                    apis["video_generator"].append({"name": f"{cp.split('.')[-1]} - {t2v or cfg_name}", "class_path": cp, "t2v_model": t2v, "config_file": cfg_name})
+                    apis["video_generator"].append({"name": f"{cp.split('.')[-1]} - {t2v or cfg_name}", "class_path": cp, "t2v_model": t2v, "init_args": init_args, "config_file": cfg_name})
                     seen.add((cp, t2v))
 
             if "chat_model" in config:
@@ -296,6 +298,11 @@ def _add_version(src: Path, dst: Path, meta_path: Path, key: str, vid: str, mode
         return
     dst.parent.mkdir(exist_ok=True)
     shutil.copy2(str(src), str(dst))
+    _register_version_entry(meta_path, key, vid, model)
+
+
+def _register_version_entry(meta_path: Path, key: str, vid: str, model: str = ""):
+    """Register an already-written file as a version entry (without copying)."""
     meta = _read_json(meta_path, {})
     for e in meta.setdefault(key, []):
         e["selected"] = False

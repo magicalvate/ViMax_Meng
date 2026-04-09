@@ -33,7 +33,7 @@ class ImageGeneratorDoubaoSeedreamYunwuAPI:
             size: [1024x1024, 4096x4096]
         """
 
-        logging.info(f"Calling {self.model} to generate image...")
+        logging.info(f"Calling {self.model} to generate image... key_suffix={self.api_key[-6:] if self.api_key else 'EMPTY'}")
 
         image = [
             image_path_to_b64(path, mime=True) for path in reference_image_paths

@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, UploadFile
 from frontend.core import (
     wd, save_upload, get_pipeline, find_char_dir,
     load_portrait_versions, save_portrait_versions,
-    add_portrait_version, new_task, new_vid,
+    add_portrait_version, _register_version_entry, new_task, new_vid,
     task_done, task_error, task_progress, load_style,
     get_model_label, _tasks,
     SCENE_REF_EXTS, _read_json, _write_json, load_portrait_refs,
@@ -17,6 +17,17 @@ from frontend.core import (
 
 logger = logging.getLogger("vimax.server")
 router = APIRouter()
+
+
+def _save_backup_then_new(char_dir: Path, view: str, old_bytes: dict, model_label: str):
+    """生成成功后才将备份和新版写入版本目录，避免失败时留下孤立备份。"""
+    ver_dir = char_dir / "versions"
+    ver_dir.mkdir(exist_ok=True)
+    if view in old_bytes:
+        old_vid = new_vid()
+        (ver_dir / f"{view}_{old_vid}.png").write_bytes(old_bytes[view])
+        _register_version_entry(char_dir / "portrait_versions.json", view, old_vid)
+    add_portrait_version(char_dir, view, new_vid(), model=model_label)
 
 
 @router.post("/api/projects/{project}/characters/{char_idx}/portraits/regenerate")
@@ -54,10 +65,12 @@ async def _run_regenerate_all_portraits(tid: str, pipeline, p: Path, char_idx: i
         ev = asyncio.Event()
         Script2VideoPipeline.character_portrait_events[char_idx] = ev
 
+        # 提前读入旧图内容（内存备份），生成成功后才写入版本目录
+        old_bytes: dict = {}
         for view in ("front", "side", "back"):
             portrait_path = char_dir / f"{view}.png"
             if portrait_path.exists():
-                add_portrait_version(char_dir, view, new_vid())
+                old_bytes[view] = portrait_path.read_bytes()
 
         task_progress(tid, "图像生成 API 调用中（正面）…")
         front_path = char_dir / "front.png"
@@ -66,21 +79,21 @@ async def _run_regenerate_all_portraits(tid: str, pipeline, p: Path, char_idx: i
         ref_paths = [r["path"] for r in refs if r.get("path") and Path(r["path"]).exists()]
         output = await pipeline.character_portraits_generator.generate_front_portrait(char, style, ref_paths)
         output.save(str(front_path))
-        add_portrait_version(char_dir, "front", new_vid(), model=model_label)
+        _save_backup_then_new(char_dir, "front", old_bytes, model_label)
 
         task_progress(tid, "图像生成 API 调用中（侧面）…")
         side_path = char_dir / "side.png"
         side_path.unlink(missing_ok=True)
         output = await pipeline.character_portraits_generator.generate_side_portrait(char, str(front_path))
         output.save(str(side_path))
-        add_portrait_version(char_dir, "side", new_vid(), model=model_label)
+        _save_backup_then_new(char_dir, "side", old_bytes, model_label)
 
         task_progress(tid, "图像生成 API 调用中（背面）…")
         back_path = char_dir / "back.png"
         back_path.unlink(missing_ok=True)
         output = await pipeline.character_portraits_generator.generate_back_portrait(char, str(front_path))
         output.save(str(back_path))
-        add_portrait_version(char_dir, "back", new_vid(), model=model_label)
+        _save_backup_then_new(char_dir, "back", old_bytes, model_label)
 
         ev.set()
         task_done(tid)
@@ -226,12 +239,7 @@ async def _run_regenerate_portrait(tid: str, pipeline, p: Path, char_idx: int, v
         Script2VideoPipeline.character_portrait_events[char_idx] = ev
 
         portrait_path = char_dir / f"{view}.png"
-        if portrait_path.exists():
-            old_vid = new_vid()
-            add_portrait_version(char_dir, view, old_vid)
-            _tasks[tid]["preview_url"] = (
-                f"/files/{p.name}/character_portraits/{char_dir.name}/versions/{view}_{old_vid}.png"
-            )
+        old_content = portrait_path.read_bytes() if portrait_path.exists() else None
 
         if view == "front":
             task_progress(tid, "图像生成 API 调用中（正面肖像）…")
@@ -258,6 +266,17 @@ async def _run_regenerate_portrait(tid: str, pipeline, p: Path, char_idx: int, v
             output.save(str(back_path))
 
         ev.set()
+        # 生成成功后，才把旧图写入版本目录并注册
+        if old_content is not None:
+            old_vid = new_vid()
+            ver_dir = char_dir / "versions"
+            ver_dir.mkdir(exist_ok=True)
+            backup_path = ver_dir / f"{view}_{old_vid}.png"
+            backup_path.write_bytes(old_content)
+            _register_version_entry(char_dir / "portrait_versions.json", view, old_vid)
+            _tasks[tid]["preview_url"] = (
+                f"/files/{p.name}/character_portraits/{char_dir.name}/versions/{view}_{old_vid}.png"
+            )
         vid = new_vid()
         add_portrait_version(char_dir, view, vid, model=model_label)
         _tasks[tid]["new_vid"] = vid
