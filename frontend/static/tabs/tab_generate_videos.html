@@ -114,9 +114,11 @@
                 </div>
                 <div class="version-strip version-strip-video" v-if="shotVersionList(shot,'video').length > 0">
                   <div class="version-item version-item-video" v-for="v in shotVersionList(shot,'video')" :key="v.id"
-                    :class="{selected: v.selected}" @click="selectShotVersion(shot,'video',v.id)" :title="v.created_at">
+                    :class="{selected: v.selected}" @click="selectShotVersion(shot,'video',v.id)"
+                    :title="(v.model || '') + (v.model && v.created_at ? '\n' : '') + (v.created_at || '')">
                     <span class="version-video-icon">▶</span>
                     <span class="version-time">{{ formatVersionTime(v.created_at) }}</span>
+                    <span class="version-model" v-if="v.model">{{ v.model }}</span>
                     <button class="version-del" @click.stop="deleteShotVersion(shot,'video',v.id)">✕</button>
                   </div>
                 </div>

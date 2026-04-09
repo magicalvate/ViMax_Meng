@@ -5,7 +5,8 @@ import shutil
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Body, HTTPException, Request
+from pydantic import BaseModel
 
 from frontend.core import (
     wd, get_pipeline, load_style, preset_all_frame_events,
@@ -15,6 +16,10 @@ from frontend.core import (
 
 logger = logging.getLogger("vimax.server")
 router = APIRouter()
+
+
+class RunStageBody(BaseModel):
+    force: bool = False
 
 
 def _get_script(p: Path) -> str:
@@ -154,18 +159,13 @@ async def get_stages_status(project: str):
 
 
 @router.post("/api/projects/{project}/run/{stage}")
-async def run_stage(project: str, stage: str, request: Request):
+async def run_stage(project: str, stage: str, body: Optional[RunStageBody] = Body(default=None)):
     valid_stages = set(_STAGE_PREREQUISITES.keys())
     if stage not in valid_stages:
         raise HTTPException(400, f"Unknown stage '{stage}'. Valid: {sorted(valid_stages)}")
 
     p = wd(project)
-    body: Dict = {}
-    try:
-        body = await request.json()
-    except Exception:
-        pass
-    force = bool(body.get("force", False))
+    force = body.force if body else False
 
     for prereq in _STAGE_PREREQUISITES[stage]:
         if not (p / prereq).exists():
