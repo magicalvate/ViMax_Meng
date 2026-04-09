@@ -91,6 +91,26 @@
               </div>
             </div>
           </div>
+
+          <!-- 参考图 -->
+          <div style="margin-top:10px;border-top:1px solid #2a2a3a;padding-top:8px">
+            <div style="font-size:11px;color:#888;margin-bottom:6px">
+              参考图（生成正面肖像时使用）
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start">
+              <div v-for="ref in (portraitRefs[String(char.idx)] || [])" :key="ref.path"
+                style="position:relative;width:56px;height:56px;flex-shrink:0">
+                <img :src="ref.url" style="width:56px;height:56px;object-fit:cover;border-radius:4px;cursor:pointer;border:1px solid #333"
+                  @click="openLightbox(ref.url)" />
+                <button @click="deletePortraitRef(char.idx, ref)"
+                  style="position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:#333;color:#ccc;border:none;cursor:pointer;font-size:10px;line-height:16px;padding:0;display:flex;align-items:center;justify-content:center">✕</button>
+              </div>
+              <label style="width:56px;height:56px;border:1px dashed #444;border-radius:4px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#666;font-size:20px;flex-shrink:0" title="上传参考图">
+                +
+                <input type="file" accept="image/*" style="display:none" @change="uploadPortraitRef(char.idx, $event)" />
+              </label>
+            </div>
+          </div>
         </div>
       </div>
     </div>

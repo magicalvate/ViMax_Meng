@@ -12,6 +12,7 @@ from frontend.core import (
     add_portrait_version, new_task, new_vid,
     task_done, task_error, task_progress, load_style,
     get_model_label, _tasks,
+    SCENE_REF_EXTS, _read_json, _write_json, load_portrait_refs,
 )
 
 logger = logging.getLogger("vimax.server")
@@ -61,7 +62,9 @@ async def _run_regenerate_all_portraits(tid: str, pipeline, p: Path, char_idx: i
         task_progress(tid, "图像生成 API 调用中（正面）…")
         front_path = char_dir / "front.png"
         front_path.unlink(missing_ok=True)
-        output = await pipeline.character_portraits_generator.generate_front_portrait(char, style)
+        refs = load_portrait_refs(char_dir, p.name)
+        ref_paths = [r["path"] for r in refs if r.get("path") and Path(r["path"]).exists()]
+        output = await pipeline.character_portraits_generator.generate_front_portrait(char, style, ref_paths)
         output.save(str(front_path))
         add_portrait_version(char_dir, "front", new_vid(), model=model_label)
 
@@ -233,7 +236,9 @@ async def _run_regenerate_portrait(tid: str, pipeline, p: Path, char_idx: int, v
         if view == "front":
             task_progress(tid, "图像生成 API 调用中（正面肖像）…")
             front_path.unlink(missing_ok=True)
-            output = await pipeline.character_portraits_generator.generate_front_portrait(char, style)
+            refs = load_portrait_refs(char_dir, p.name)
+            ref_paths = [r["path"] for r in refs if r.get("path") and Path(r["path"]).exists()]
+            output = await pipeline.character_portraits_generator.generate_front_portrait(char, style, ref_paths)
             output.save(str(front_path))
         elif view == "side":
             if not front_path.exists():
@@ -260,3 +265,72 @@ async def _run_regenerate_portrait(tid: str, pipeline, p: Path, char_idx: int, v
     except Exception as e:
         logger.exception(f"Task {tid} failed")
         task_error(tid, str(e))
+
+
+# ── 人物参考图管理 ────────────────────────────────────────────────────────────
+
+@router.get("/api/projects/{project}/characters/{char_idx}/portrait_refs")
+async def get_portrait_refs(project: str, char_idx: int):
+    p = wd(project)
+    char_dir = find_char_dir(p, char_idx)
+    if not char_dir:
+        return []
+    return load_portrait_refs(char_dir, project)
+
+
+@router.post("/api/projects/{project}/characters/{char_idx}/portrait_refs")
+async def add_portrait_ref(project: str, char_idx: int, file: UploadFile):
+    p = wd(project)
+    char_dir = find_char_dir(p, char_idx)
+    if not char_dir:
+        chars_path = p / "characters.json"
+        if not chars_path.exists():
+            raise HTTPException(404, "characters.json not found")
+        from interfaces import CharacterInScene
+        characters = [CharacterInScene.model_validate(c) for c in json.loads(chars_path.read_text(encoding="utf-8"))]
+        char = next((c for c in characters if c.idx == char_idx), None)
+        if not char:
+            raise HTTPException(404, f"Character idx={char_idx} not found")
+        char_dir = p / "character_portraits" / f"{char_idx}_{char.identifier_in_scene}"
+        char_dir.mkdir(parents=True, exist_ok=True)
+
+    suffix = Path(file.filename or "ref.png").suffix.lower()
+    if suffix not in SCENE_REF_EXTS:
+        raise HTTPException(400, "Unsupported file type")
+
+    refs_dir = char_dir / "portrait_refs"
+    refs_dir.mkdir(exist_ok=True)
+    stem = Path(file.filename or "ref").stem
+    target = refs_dir / f"{stem}{suffix}"
+    counter = 1
+    while target.exists():
+        target = refs_dir / f"{stem}_{counter}{suffix}"
+        counter += 1
+    save_upload(file, target)
+
+    refs_path = char_dir / "portrait_refs.json"
+    data = _read_json(refs_path, [])
+    data.append({"path": str(target), "description": ""})
+    _write_json(refs_path, data)
+
+    return {"ok": True, "filename": target.name}
+
+
+@router.delete("/api/projects/{project}/characters/{char_idx}/portrait_refs/{filename}")
+async def delete_portrait_ref(project: str, char_idx: int, filename: str):
+    p = wd(project)
+    char_dir = find_char_dir(p, char_idx)
+    if not char_dir:
+        raise HTTPException(404, "Character portrait directory not found")
+
+    target = char_dir / "portrait_refs" / filename
+    if not target.exists():
+        raise HTTPException(404, "File not found")
+    target.unlink()
+
+    refs_path = char_dir / "portrait_refs.json"
+    data = _read_json(refs_path, [])
+    data = [item for item in data if Path(item.get("path", "")).name != filename]
+    _write_json(refs_path, data)
+
+    return {"ok": True}

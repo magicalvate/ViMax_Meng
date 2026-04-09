@@ -45,6 +45,7 @@ class CharacterPortraitsGenerator:
         self,
         character: CharacterInScene,
         style: str,
+        reference_image_paths: List[str] = [],
     ) -> ImageOutput:
         features = "(static) " + character.static_features + "; (dynamic) " + character.dynamic_features
         prompt = prompt_template_front.format(
@@ -54,6 +55,7 @@ class CharacterPortraitsGenerator:
         )
         image_output = await self.image_generator.generate_single_image(
             prompt=prompt,
+            reference_image_paths=reference_image_paths,
             # size="512x512",
         )
         return image_output

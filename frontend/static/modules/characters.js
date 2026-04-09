@@ -1,5 +1,5 @@
 export function setupCharacters({
-  currentProject, portraitsRegistry, imgTs, modal,
+  currentProject, portraitsRegistry, portraitRefs, imgTs, modal,
   enc, showToast, startPoll, refreshPortraitVersions,
 }) {
   function portraitUrl(charName, view) {
@@ -78,5 +78,40 @@ export function setupCharacters({
     };
   }
 
-  return { portraitUrl, regeneratePortrait, regenerateAllCharPortraits, openPortraitModal };
+  async function uploadPortraitRef(charIdx, event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = "";
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const res = await fetch(
+        `/api/projects/${enc(currentProject.value)}/characters/${charIdx}/portrait_refs`,
+        { method: "POST", body: form }
+      );
+      if (!res.ok) throw new Error(await res.text());
+      const refsRes = await fetch(`/api/projects/${enc(currentProject.value)}/characters/${charIdx}/portrait_refs`);
+      portraitRefs.value[String(charIdx)] = refsRes.ok ? await refsRes.json() : [];
+      showToast("参考图已上传", "success");
+    } catch (e) {
+      showToast("上传失败: " + e.message, "error");
+    }
+  }
+
+  async function deletePortraitRef(charIdx, ref) {
+    const filename = ref.path.split(/[\\/]/).pop();
+    try {
+      const res = await fetch(
+        `/api/projects/${enc(currentProject.value)}/characters/${charIdx}/portrait_refs/${encodeURIComponent(filename)}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) throw new Error(await res.text());
+      portraitRefs.value[String(charIdx)] = (portraitRefs.value[String(charIdx)] || []).filter(r => r.path !== ref.path);
+      showToast("参考图已删除", "success");
+    } catch (e) {
+      showToast("删除失败: " + e.message, "error");
+    }
+  }
+
+  return { portraitUrl, regeneratePortrait, regenerateAllCharPortraits, openPortraitModal, uploadPortraitRef, deletePortraitRef };
 }
