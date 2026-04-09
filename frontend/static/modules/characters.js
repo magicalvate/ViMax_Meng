@@ -30,6 +30,26 @@ export function setupCharacters({
     }
   }
 
+  async function regenerateAllCharPortraits(charName, charIdx) {
+    const key = `portrait_all_${charIdx}`;
+    try {
+      const res = await fetch(
+        `/api/projects/${enc(currentProject.value)}/characters/${charIdx}/portraits/regenerate`,
+        { method: "POST" }
+      );
+      if (!res.ok) throw new Error(await res.text());
+      const { task_id } = await res.json();
+      startPoll(key, task_id, async () => {
+        for (const view of ["front", "side", "back"])
+          imgTs.value[`portrait_${charName}_${view}`] = Date.now();
+        await refreshPortraitVersions(charIdx);
+        showToast(`${charName} 全部肖像已重新生成`, "success");
+      });
+    } catch (e) {
+      showToast("启动失败: " + e.message, "error");
+    }
+  }
+
   function openPortraitModal(charName, charIdx, view) {
     modal.value = {
       title: `替换 ${charName} · ${view} 肖像`,
@@ -58,5 +78,5 @@ export function setupCharacters({
     };
   }
 
-  return { portraitUrl, regeneratePortrait, openPortraitModal };
+  return { portraitUrl, regeneratePortrait, regenerateAllCharPortraits, openPortraitModal };
 }

@@ -388,7 +388,23 @@ def active_filename(asset: str) -> str:
     return "video.mp4" if asset == "video" else f"{asset}.png"
 
 
-def add_shot_version(shot_dir: Path, asset: str, vid: str):
+def get_model_label(generator) -> str:
+    """从 generator 实例提取模型标签，用于版本追踪。"""
+    model = (
+        getattr(generator, 'model', None) or
+        getattr(generator, 't2v_model', None) or
+        getattr(generator, 'i2v_model', None) or
+        ""
+    )
+    if model:
+        return str(model)
+    cls = type(generator).__name__
+    for s in ("ImageGenerator", "VideoGenerator", "GoogleAPI", "YunwuAPI", "SiliconflowAPI", "API"):
+        cls = cls.replace(s, "")
+    return cls or "unknown"
+
+
+def add_shot_version(shot_dir: Path, asset: str, vid: str, model: str = ""):
     ext = asset_ext(asset)
     active = shot_dir / active_filename(asset)
     if not active.exists():
@@ -400,11 +416,14 @@ def add_shot_version(shot_dir: Path, asset: str, vid: str):
     meta = load_shot_versions(shot_dir)
     for e in meta.setdefault(asset, []):
         e["selected"] = False
-    meta[asset].append({
+    entry: Dict = {
         "id": vid,
         "created_at": _time.strftime("%Y-%m-%dT%H:%M:%S"),
         "selected": True,
-    })
+    }
+    if model:
+        entry["model"] = model
+    meta[asset].append(entry)
     save_shot_versions(shot_dir, meta)
 
 
@@ -437,7 +456,7 @@ def save_portrait_versions(char_dir: Path, meta: Dict):
     )
 
 
-def add_portrait_version(char_dir: Path, view: str, vid: str):
+def add_portrait_version(char_dir: Path, view: str, vid: str, model: str = ""):
     active = char_dir / f"{view}.png"
     if not active.exists():
         return
@@ -448,11 +467,14 @@ def add_portrait_version(char_dir: Path, view: str, vid: str):
     meta = load_portrait_versions(char_dir)
     for e in meta.setdefault(view, []):
         e["selected"] = False
-    meta[view].append({
+    entry: Dict = {
         "id": vid,
         "created_at": _time.strftime("%Y-%m-%dT%H:%M:%S"),
         "selected": True,
-    })
+    }
+    if model:
+        entry["model"] = model
+    meta[view].append(entry)
     save_portrait_versions(char_dir, meta)
 
 

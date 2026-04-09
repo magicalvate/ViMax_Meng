@@ -41,9 +41,22 @@
       <div v-if="characters.length === 0" class="empty">暂无角色数据</div>
       <div class="char-grid">
         <div class="char-card" v-for="char in characters" :key="char.idx">
-          <p class="char-name">{{ char.identifier_in_scene }}</p>
-          <p class="char-feature">{{ char.static_features }}</p>
-          <p class="char-feature">{{ char.dynamic_features }}</p>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+            <div>
+              <p class="char-name">{{ char.identifier_in_scene }}</p>
+              <p class="char-feature">{{ char.static_features }}</p>
+              <p class="char-feature">{{ char.dynamic_features }}</p>
+            </div>
+            <div style="flex-shrink:0">
+              <span v-if="isRunning(`portrait_all_${char.idx}`)" class="task-badge running" style="font-size:11px">
+                {{ taskMsg(`portrait_all_${char.idx}`) }}
+              </span>
+              <button v-else class="btn btn-ghost" style="font-size:12px;padding:4px 10px;white-space:nowrap"
+                @click="regenerateAllCharPortraits(char.identifier_in_scene, char.idx)">
+                ↺ 重跑全部角度
+              </button>
+            </div>
+          </div>
           <div class="portrait-row">
             <div class="portrait-item" v-for="view in ['front','side','back']" :key="view">
               <span class="portrait-label">{{ view }}</span>
@@ -70,8 +83,9 @@
                 <div class="version-item version-item-portrait" v-for="v in portraitVersionList(char.idx, view)" :key="v.id"
                   :class="{selected: v.selected}"
                   @click="selectPortraitVersion(char.idx, char.identifier_in_scene, view, v.id)"
-                  :title="v.created_at">
+                  :title="(v.model || '') + (v.model && v.created_at ? '\n' : '') + (v.created_at || '')">
                   <img :src="v.url" />
+                  <span class="version-model" v-if="v.model">{{ v.model }}</span>
                   <button class="version-del" @click.stop="deletePortraitVersion(char.idx, char.identifier_in_scene, view, v.id)">✕</button>
                 </div>
               </div>

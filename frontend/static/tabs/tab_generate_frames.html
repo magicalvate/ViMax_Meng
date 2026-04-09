@@ -106,9 +106,11 @@
                 </div>
                 <div class="version-strip" v-if="shotVersionList(shot,'first_frame').length > 0">
                   <div class="version-item" v-for="v in shotVersionList(shot,'first_frame')" :key="v.id"
-                    :class="{selected: v.selected}" @click="selectShotVersion(shot,'first_frame',v.id)" :title="v.created_at">
+                    :class="{selected: v.selected}" @click="selectShotVersion(shot,'first_frame',v.id)"
+                    :title="(v.model || '') + (v.model && v.created_at ? '\n' : '') + (v.created_at || '')">
                     <img :src="v.url" />
                     <span class="version-time">{{ formatVersionTime(v.created_at) }}</span>
+                    <span class="version-model" v-if="v.model">{{ v.model }}</span>
                     <button class="version-del" @click.stop="deleteShotVersion(shot,'first_frame',v.id)">✕</button>
                   </div>
                 </div>
@@ -214,9 +216,11 @@
                 </div>
                 <div class="version-strip" v-if="shotVersionList(shot,'last_frame').length > 0">
                   <div class="version-item" v-for="v in shotVersionList(shot,'last_frame')" :key="v.id"
-                    :class="{selected: v.selected}" @click="selectShotVersion(shot,'last_frame',v.id)" :title="v.created_at">
+                    :class="{selected: v.selected}" @click="selectShotVersion(shot,'last_frame',v.id)"
+                    :title="(v.model || '') + (v.model && v.created_at ? '\n' : '') + (v.created_at || '')">
                     <img :src="v.url" />
                     <span class="version-time">{{ formatVersionTime(v.created_at) }}</span>
+                    <span class="version-model" v-if="v.model">{{ v.model }}</span>
                     <button class="version-del" @click.stop="deleteShotVersion(shot,'last_frame',v.id)">✕</button>
                   </div>
                 </div>

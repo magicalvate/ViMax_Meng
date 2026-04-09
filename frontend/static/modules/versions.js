@@ -37,7 +37,8 @@ export function setupVersions({ currentProject, portraitVersions, imgTs, enc, sh
         { method: "POST" }
       );
       if (!res.ok) throw new Error(await res.text());
-      await refreshShotVersions(shot);
+      const data = await res.json();
+      shot.versions = data.versions;
       const tsKey = asset === "video" ? `shot_${shot.idx}_video.mp4` : `shot_${shot.idx}_${asset}.png`;
       imgTs.value[tsKey] = Date.now();
       showToast("已切换版本", "success");
@@ -77,7 +78,8 @@ export function setupVersions({ currentProject, portraitVersions, imgTs, enc, sh
         { method: "POST" }
       );
       if (!res.ok) throw new Error(await res.text());
-      await refreshPortraitVersions(charIdx);
+      const data = await res.json();
+      portraitVersions.value = { ...portraitVersions.value, [String(charIdx)]: data.versions };
       imgTs.value[`portrait_${charName}_${view}`] = Date.now();
       showToast("已切换版本", "success");
     } catch (e) {

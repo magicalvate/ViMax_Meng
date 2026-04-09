@@ -329,6 +329,11 @@ body { margin: 0; font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-s
   display: block; font-size: 9px; color: #64748b; text-align: center;
   padding: 2px 0; background: #0f1117; line-height: 1.2;
 }
+.version-model {
+  display: block; font-size: 8px; color: #7c3aed; text-align: center;
+  padding: 1px 2px; background: #0f1117; line-height: 1.2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 72px;
+}
 .version-del {
   position: absolute; top: 2px; right: 2px; width: 14px; height: 14px;
   background: rgba(220,38,38,.85); color: #fff; border: none; border-radius: 3px;

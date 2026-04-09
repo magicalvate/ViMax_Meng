@@ -3,8 +3,10 @@ import json
 import logging
 import shutil
 from pathlib import Path
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request, UploadFile
+from fastapi import APIRouter, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from frontend.core import (
     wd, save_upload, get_pipeline, SCENE_REF_EXTS,
@@ -14,11 +16,30 @@ from frontend.core import (
     asset_ext, active_filename, add_shot_version,
     new_task, new_vid, task_done, task_error, task_progress,
     setup_frame_events, preset_all_frame_events, get_first_shot_ff_pair,
-    _tasks,
+    get_model_label, _tasks,
 )
 
 logger = logging.getLogger("vimax.server")
 router = APIRouter()
+
+
+class DescriptionBody(BaseModel):
+    ff_desc: Optional[str] = None
+    lf_desc: Optional[str] = None
+    motion_desc: Optional[str] = None
+    audio_desc: Optional[str] = None
+    visual_desc: Optional[str] = None
+    ff_vis_char_idxs: Optional[list] = None
+    lf_vis_char_idxs: Optional[list] = None
+
+
+class EnabledBody(BaseModel):
+    enabled: bool = True
+
+
+class ToggleRefBody(BaseModel):
+    path: str
+    enabled: bool = True
 
 
 # ── 替换帧（手动上传） ────────────────────────────────────────────────────────
@@ -72,18 +93,14 @@ async def delete_scene_ref(project: str, shot_idx: int, filename: str):
 # ── 描述编辑 ─────────────────────────────────────────────────────────────────
 
 @router.patch("/api/projects/{project}/shots/{shot_idx}/description")
-async def update_shot_description(project: str, shot_idx: int, request: Request):
+async def update_shot_description(project: str, shot_idx: int, body: DescriptionBody):
     p = wd(project)
     desc_path = p / "shots" / str(shot_idx) / "shot_description.json"
     if not desc_path.exists():
         raise HTTPException(404, "shot_description.json not found")
     desc = json.loads(desc_path.read_text(encoding="utf-8"))
-    body = await request.json()
-    editable = ("ff_desc", "lf_desc", "motion_desc", "audio_desc", "visual_desc",
-                "ff_vis_char_idxs", "lf_vis_char_idxs")
-    for key in editable:
-        if key in body:
-            desc[key] = body[key]
+    for key, value in body.model_dump(exclude_none=True).items():
+        desc[key] = value
     desc_path.write_text(json.dumps(desc, ensure_ascii=False, indent=2), encoding="utf-8")
     return desc
 
@@ -91,7 +108,7 @@ async def update_shot_description(project: str, shot_idx: int, request: Request)
 # ── 帧启用/禁用 ───────────────────────────────────────────────────────────────
 
 @router.patch("/api/projects/{project}/shots/{shot_idx}/frames/{frame_type}/enabled")
-async def set_frame_enabled_ep(project: str, shot_idx: int, frame_type: str, request: Request):
+async def set_frame_enabled_ep(project: str, shot_idx: int, frame_type: str, body: EnabledBody):
     if frame_type not in ("first", "last"):
         raise HTTPException(400, "frame_type must be first/last")
     p = wd(project)
@@ -99,10 +116,8 @@ async def set_frame_enabled_ep(project: str, shot_idx: int, frame_type: str, req
     ft_key = f"{frame_type}_frame"
     if not (shot_dir / f"{ft_key}.png").exists():
         raise HTTPException(404, f"{ft_key}.png not found")
-    body = await request.json()
-    enabled = bool(body.get("enabled", True))
-    set_frame_enabled(shot_dir, ft_key, enabled)
-    return {"ok": True, "enabled": enabled}
+    set_frame_enabled(shot_dir, ft_key, body.enabled)
+    return {"ok": True, "enabled": body.enabled}
 
 
 @router.get("/api/projects/{project}/shots/{shot_idx}/frames/{frame_type}/refs")
@@ -116,22 +131,19 @@ async def get_frame_refs(project: str, shot_idx: int, frame_type: str):
 
 
 @router.patch("/api/projects/{project}/shots/{shot_idx}/frames/{frame_type}/refs")
-async def toggle_frame_ref(project: str, shot_idx: int, frame_type: str, request: Request):
+async def toggle_frame_ref(project: str, shot_idx: int, frame_type: str, body: ToggleRefBody):
     if frame_type not in ("first", "last"):
         raise HTTPException(400, "frame_type must be first/last")
     p = wd(project)
     shot_dir = p / "shots" / str(shot_idx)
     ft_key = f"{frame_type}_frame"
-    body = await request.json()
-    path = body.get("path", "")
-    enabled = bool(body.get("enabled", True))
     disabled = load_ref_overrides(shot_dir, ft_key)
-    if enabled:
-        disabled.discard(path)
+    if body.enabled:
+        disabled.discard(body.path)
     else:
-        disabled.add(path)
+        disabled.add(body.path)
     save_ref_overrides(shot_dir, ft_key, disabled)
-    return {"ok": True, "path": path, "enabled": enabled}
+    return {"ok": True, "path": body.path, "enabled": body.enabled}
 
 
 @router.delete("/api/projects/{project}/shots/{shot_idx}/frames/{frame_type}")
@@ -184,7 +196,7 @@ async def select_shot_version(project: str, shot_idx: int, asset: str, vid: str)
     for e in meta.get(asset, []):
         e["selected"] = e["id"] == vid
     save_shot_versions(shot_dir, meta)
-    return {"ok": True}
+    return {"ok": True, "versions": shot_version_urls(project, shot_idx, shot_dir)}
 
 
 @router.delete("/api/projects/{project}/shots/{shot_idx}/versions/{asset}/{vid}")
@@ -296,7 +308,8 @@ async def _run_regenerate_frame(tid: str, pipeline, p: Path, shot_idx: int, fram
         )
         task_progress(tid, "归档版本…")
         vid = new_vid()
-        add_shot_version(p / "shots" / str(shot_idx), ft_key, vid)
+        add_shot_version(p / "shots" / str(shot_idx), ft_key, vid,
+                         model=get_model_label(pipeline.image_generator))
         set_frame_enabled(p / "shots" / str(shot_idx), ft_key, True)
         _tasks[tid]["new_vid"] = vid
         _tasks[tid]["enabled"] = True
@@ -367,7 +380,8 @@ async def _run_regenerate_video(tid: str, pipeline, p: Path, shot_idx: int):
 
         video_output.save(str(video_path))
         vid = new_vid()
-        add_shot_version(p / "shots" / str(shot_idx), "video", vid)
+        add_shot_version(p / "shots" / str(shot_idx), "video", vid,
+                         model=get_model_label(pipeline.video_generator))
         _tasks[tid]["new_vid"] = vid
         task_done(tid)
     except Exception as e:
